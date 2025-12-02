@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Virtual env
+.venv/
+venv/
+
+# IDE/editor
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+pdf_tools.egg-info/
+
+# PyInstaller
+*.spec
+
+# Logs
+*.log
