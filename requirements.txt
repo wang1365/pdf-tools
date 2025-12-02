@@ -1,2 +1,4 @@
 pdf2docx
 PySide6
+pillow
+cairosvg
