@@ -7,7 +7,7 @@ name = "pdf-tools"
 version = "0.1.0"
 description = "Convert PDF to Word (DOCX) using pdf2docx"
 requires-python = ">=3.12"
-dependencies = ["pdf2docx", "PySide6"]
+dependencies = ["pdf2docx", "PySide6", "pillow", "cairosvg", "pypdf", "cryptography", "PyMuPDF", "python-pptx"]
 
 [project.scripts]
 pdf-tools = "pdf_tools.__main__:main"

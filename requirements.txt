@@ -2,3 +2,7 @@ pdf2docx
 PySide6
 pillow
 cairosvg
+pypdf
+cryptography
+PyMuPDF
+python-pptx
