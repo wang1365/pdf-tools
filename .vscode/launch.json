@@ -1,0 +1,16 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "GUI: pdf-tools-gui",
+      "type": "python",
+      "request": "launch",
+      "module": "pdf_tools.gui_main",
+      "windows": { "pythonPath": "${workspaceFolder}\\.venv\\Scripts\\python.exe" },
+      "linux": { "pythonPath": "${workspaceFolder}/.venv/bin/python" },
+      "justMyCode": true,
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}"
+    }
+  ]
+}
