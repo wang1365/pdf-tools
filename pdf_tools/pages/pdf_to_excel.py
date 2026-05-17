@@ -1,16 +1,19 @@
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QVBoxLayout, QWidget
+
+from ..ui_components import Section, StatusLabel, create_page_header
 
 
 class PdfToExcelPage(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        lay = QVBoxLayout(self)
-        lay.setContentsMargins(12, 12, 12, 12)
-        t = QLabel("PDF转Excel")
-        t.setAlignment(Qt.AlignmentFlag.AlignLeft)
-        s = QLabel("暂未实现")
-        s.setAlignment(Qt.AlignmentFlag.AlignLeft)
-        lay.addWidget(t)
-        lay.addWidget(s)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(22, 22, 22, 22)
+        layout.setSpacing(16)
 
+        layout.addWidget(create_page_header("PDF 转 Excel", "该能力尚未实现，后续会接入表格识别与导出流程。"))
+
+        section = Section("当前状态")
+        status = StatusLabel("暂未实现。当前版本不会执行 PDF 转 Excel 操作。")
+        section.body.addWidget(status)
+        layout.addWidget(section)
+        layout.addStretch(1)

@@ -1,80 +1,11 @@
-import html
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QThread, Signal, QUrl
-from PySide6.QtGui import QDesktopServices, QDragEnterEvent, QDropEvent
-from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QProgressBar, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtCore import QThread, Signal, QUrl
+from PySide6.QtGui import QDesktopServices
+from PySide6.QtWidgets import QFileDialog, QMessageBox, QVBoxLayout, QWidget
 
 from ..auth_ui import require_authorization
-
-
-class DropArea(QLabel):
-    file_selected = Signal(Path)
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.setText("点击或拖拽PDF文件到此处")
-        self.setStyleSheet(
-            """
-            QLabel {
-                border: 2px dashed #aaa;
-                border-radius: 10px;
-                padding: 14px;
-                background-color: #f9f9f9;
-                color: #555;
-                font-size: 14px;
-            }
-            QLabel:hover {
-                background-color: #eef;
-                border-color: #88d;
-            }
-            """
-        )
-        self.setAcceptDrops(True)
-        self.setMinimumHeight(60)
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
-
-    def dragEnterEvent(self, event: QDragEnterEvent):
-        if event.mimeData().hasUrls():
-            for url in event.mimeData().urls():
-                if url.toLocalFile().lower().endswith(".pdf"):
-                    event.acceptProposedAction()
-                    return
-        event.ignore()
-
-    def dropEvent(self, event: QDropEvent):
-        for url in event.mimeData().urls():
-            f = url.toLocalFile()
-            if f.lower().endswith(".pdf"):
-                self.update_file(Path(f))
-                break
-        event.acceptProposedAction()
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            f, _ = QFileDialog.getOpenFileName(self, "选择PDF", "", "PDF (*.pdf)")
-            if f:
-                self.update_file(Path(f))
-
-    def update_file(self, path: Path):
-        name = html.escape(path.name)
-        full = html.escape(str(path.absolute()))
-        self.setText(f"<div style='line-height:1.7'>{name}<br/>{full}</div>")
-        self.setTextFormat(Qt.TextFormat.RichText)
-        self.setStyleSheet(
-            """
-            QLabel {
-                border: 2px solid #4caf50;
-                border-radius: 10px;
-                padding: 14px;
-                background-color: #e8f5e9;
-                color: #2e7d32;
-                font-size: 14px;
-            }
-            """
-        )
-        self.file_selected.emit(path)
+from ..ui_components import ActionRow, DropArea, PathSelectorRow, Section, create_page_header
 
 
 class CompressThread(QThread):
@@ -110,42 +41,30 @@ class PdfCompressPage(QWidget):
         self.current_pdf_path: Path | None = None
         self.thread: CompressThread | None = None
 
-        lay = QVBoxLayout(self)
-        lay.setContentsMargins(12, 12, 12, 12)
-        lay.setSpacing(12)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(22, 22, 22, 22)
+        layout.setSpacing(16)
+        layout.addWidget(create_page_header("PDF 压缩", "压缩 PDF 内容流并去除重复对象，生成更小的 PDF 文件。"))
 
-        title = QLabel("PDF压缩")
-        title.setAlignment(Qt.AlignmentFlag.AlignLeft)
-        lay.addWidget(title)
-
+        input_section = Section("输入文件")
         self.drop_area = DropArea()
         self.drop_area.file_selected.connect(self.on_file_selected)
-        lay.addWidget(self.drop_area)
+        input_section.body.addWidget(self.drop_area)
+        layout.addWidget(input_section)
 
-        r_out = QHBoxLayout()
-        self.output_edit = QLineEdit()
-        self.output_edit.setReadOnly(True)
-        self.output_edit.setPlaceholderText("输出PDF路径")
-        self.output_btn = QPushButton("选择输出文件")
-        r_out.addWidget(QLabel("输出"))
-        r_out.addWidget(self.output_edit, 1)
-        r_out.addWidget(self.output_btn)
-        lay.addLayout(r_out)
+        output_section = Section("输出位置")
+        self.output_row = PathSelectorRow("输出", "选择输出文件", "打开文件", "输出 PDF 路径")
+        self.output_edit = self.output_row.edit
+        self.output_btn = self.output_row.choose_btn
+        self.open_btn = self.output_row.open_btn
+        output_section.body.addWidget(self.output_row)
+        layout.addWidget(output_section)
 
-        r_open = QHBoxLayout()
-        self.open_btn = QPushButton("打开文件")
-        self.open_btn.setEnabled(False)
-        r_open.addStretch(1)
-        r_open.addWidget(self.open_btn)
-        lay.addLayout(r_open)
-
-        self.progress = QProgressBar()
-        self.progress.setRange(0, 0)
-        self.progress.hide()
-        lay.addWidget(self.progress)
-
-        self.compress_btn = QPushButton("开始压缩")
-        lay.addWidget(self.compress_btn, 0, Qt.AlignmentFlag.AlignLeft)
+        self.action_row = ActionRow("开始压缩")
+        self.progress = self.action_row.progress
+        self.compress_btn = self.action_row.button
+        layout.addWidget(self.action_row)
+        layout.addStretch(1)
 
         self.output_btn.clicked.connect(self.on_choose_output)
         self.open_btn.clicked.connect(self.on_open)
@@ -158,15 +77,15 @@ class PdfCompressPage(QWidget):
 
     def on_choose_output(self):
         suggested = self.output_edit.text().strip()
-        f, _ = QFileDialog.getSaveFileName(self, "选择输出PDF", suggested or "", "PDF (*.pdf)")
-        if f:
-            self.output_edit.setText(f)
-            self.open_btn.setEnabled(Path(f).exists())
+        file_name, _ = QFileDialog.getSaveFileName(self, "选择输出 PDF", suggested or "", "PDF (*.pdf)")
+        if file_name:
+            self.output_edit.setText(file_name)
+            self.open_btn.setEnabled(Path(file_name).exists())
 
     def on_open(self):
-        p = self.output_edit.text().strip()
-        if p and Path(p).exists():
-            QDesktopServices.openUrl(QUrl.fromLocalFile(p))
+        path = self.output_edit.text().strip()
+        if path and Path(path).exists():
+            QDesktopServices.openUrl(QUrl.fromLocalFile(path))
         else:
             QMessageBox.warning(self, "提示", "文件不存在")
 
@@ -175,15 +94,14 @@ class PdfCompressPage(QWidget):
             return
         inp = self.current_pdf_path
         if not inp or not inp.is_file():
-            QMessageBox.warning(self, "提示", "请选择输入PDF")
+            QMessageBox.warning(self, "提示", "请选择输入 PDF")
             return
         out = self.output_edit.text().strip()
         if not out:
             QMessageBox.warning(self, "提示", "请选择输出文件")
             return
 
-        self.progress.show()
-        self.compress_btn.setEnabled(False)
+        self.action_row.set_processing("正在压缩 PDF...")
         self.open_btn.setEnabled(False)
         self.thread = CompressThread(str(inp), out)
         self.thread.finished_signal.connect(self.on_finished)
@@ -194,9 +112,11 @@ class PdfCompressPage(QWidget):
     def on_finished(self, out: str):
         self.output_edit.setText(out)
         self.open_btn.setEnabled(Path(out).exists())
+        self.action_row.set_success(f"处理完成：{out}")
         QMessageBox.information(self, "完成", out)
 
     def on_error(self, msg: str):
+        self.action_row.set_error(msg)
         QMessageBox.critical(self, "错误", msg)
 
     def on_thread_done(self):

@@ -2,9 +2,10 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt, QThread, Signal, QUrl
 from PySide6.QtGui import QDesktopServices
-from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QProgressBar, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QListWidget, QListWidgetItem, QMessageBox, QPushButton, QVBoxLayout, QWidget
 
 from ..auth_ui import require_authorization
+from ..ui_components import ActionRow, PathSelectorRow, Section, create_page_header
 
 
 class MergeThread(QThread):
@@ -39,53 +40,40 @@ class PdfMergePage(QWidget):
         super().__init__(parent)
         self.thread: MergeThread | None = None
 
-        lay = QVBoxLayout(self)
-        lay.setContentsMargins(12, 12, 12, 12)
-        lay.setSpacing(12)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(22, 22, 22, 22)
+        layout.setSpacing(16)
+        layout.addWidget(create_page_header("PDF 合并", "按列表顺序合并多个 PDF 文件。"))
 
-        title = QLabel("PDF合并")
-        title.setAlignment(Qt.AlignmentFlag.AlignLeft)
-        lay.addWidget(title)
-
+        input_section = Section("输入文件")
         self.list_widget = QListWidget()
-        lay.addWidget(self.list_widget, 1)
+        input_section.body.addWidget(self.list_widget, 1)
 
-        r_btn = QHBoxLayout()
-        self.add_btn = QPushButton("添加PDF")
+        button_row = QHBoxLayout()
+        self.add_btn = QPushButton("添加 PDF")
         self.remove_btn = QPushButton("移除")
         self.up_btn = QPushButton("上移")
         self.down_btn = QPushButton("下移")
-        r_btn.addWidget(self.add_btn)
-        r_btn.addWidget(self.remove_btn)
-        r_btn.addWidget(self.up_btn)
-        r_btn.addWidget(self.down_btn)
-        r_btn.addStretch(1)
-        lay.addLayout(r_btn)
+        button_row.addWidget(self.add_btn)
+        button_row.addWidget(self.remove_btn)
+        button_row.addWidget(self.up_btn)
+        button_row.addWidget(self.down_btn)
+        button_row.addStretch(1)
+        input_section.body.addLayout(button_row)
+        layout.addWidget(input_section, 1)
 
-        r_out = QHBoxLayout()
-        self.output_edit = QLineEdit()
-        self.output_edit.setReadOnly(True)
-        self.output_edit.setPlaceholderText("输出PDF路径")
-        self.output_btn = QPushButton("选择输出文件")
-        r_out.addWidget(QLabel("输出"))
-        r_out.addWidget(self.output_edit, 1)
-        r_out.addWidget(self.output_btn)
-        lay.addLayout(r_out)
+        output_section = Section("输出位置")
+        self.output_row = PathSelectorRow("输出", "选择输出文件", "打开文件", "输出 PDF 路径")
+        self.output_edit = self.output_row.edit
+        self.output_btn = self.output_row.choose_btn
+        self.open_btn = self.output_row.open_btn
+        output_section.body.addWidget(self.output_row)
+        layout.addWidget(output_section)
 
-        r_open = QHBoxLayout()
-        self.open_btn = QPushButton("打开文件")
-        self.open_btn.setEnabled(False)
-        r_open.addStretch(1)
-        r_open.addWidget(self.open_btn)
-        lay.addLayout(r_open)
-
-        self.progress = QProgressBar()
-        self.progress.setRange(0, 0)
-        self.progress.hide()
-        lay.addWidget(self.progress)
-
-        self.merge_btn = QPushButton("开始合并")
-        lay.addWidget(self.merge_btn, 0, Qt.AlignmentFlag.AlignLeft)
+        self.action_row = ActionRow("开始合并")
+        self.progress = self.action_row.progress
+        self.merge_btn = self.action_row.button
+        layout.addWidget(self.action_row)
 
         self.add_btn.clicked.connect(self.on_add)
         self.remove_btn.clicked.connect(self.on_remove)
@@ -96,11 +84,11 @@ class PdfMergePage(QWidget):
         self.merge_btn.clicked.connect(self.on_merge)
 
     def on_add(self):
-        files, _ = QFileDialog.getOpenFileNames(self, "选择PDF文件", "", "PDF (*.pdf)")
-        for f in files:
-            if f:
-                item = QListWidgetItem(Path(f).name)
-                item.setData(Qt.ItemDataRole.UserRole, f)
+        files, _ = QFileDialog.getOpenFileNames(self, "选择 PDF 文件", "", "PDF (*.pdf)")
+        for file_name in files:
+            if file_name:
+                item = QListWidgetItem(Path(file_name).name)
+                item.setData(Qt.ItemDataRole.UserRole, file_name)
                 self.list_widget.addItem(item)
         if files and not self.output_edit.text().strip():
             first = Path(files[0])
@@ -127,15 +115,15 @@ class PdfMergePage(QWidget):
 
     def on_choose_output(self):
         suggested = self.output_edit.text().strip()
-        f, _ = QFileDialog.getSaveFileName(self, "选择输出PDF", suggested or "", "PDF (*.pdf)")
-        if f:
-            self.output_edit.setText(f)
-            self.open_btn.setEnabled(Path(f).exists())
+        file_name, _ = QFileDialog.getSaveFileName(self, "选择输出 PDF", suggested or "", "PDF (*.pdf)")
+        if file_name:
+            self.output_edit.setText(file_name)
+            self.open_btn.setEnabled(Path(file_name).exists())
 
     def on_open(self):
-        p = self.output_edit.text().strip()
-        if p and Path(p).exists():
-            QDesktopServices.openUrl(QUrl.fromLocalFile(p))
+        path = self.output_edit.text().strip()
+        if path and Path(path).exists():
+            QDesktopServices.openUrl(QUrl.fromLocalFile(path))
         else:
             QMessageBox.warning(self, "提示", "文件不存在")
 
@@ -147,15 +135,14 @@ class PdfMergePage(QWidget):
             item = self.list_widget.item(i)
             inputs.append(str(item.data(Qt.ItemDataRole.UserRole)))
         if len(inputs) < 2:
-            QMessageBox.warning(self, "提示", "请至少添加2个PDF文件")
+            QMessageBox.warning(self, "提示", "请至少添加 2 个 PDF 文件")
             return
         out = self.output_edit.text().strip()
         if not out:
             QMessageBox.warning(self, "提示", "请选择输出文件")
             return
 
-        self.progress.show()
-        self.merge_btn.setEnabled(False)
+        self.action_row.set_processing("正在合并 PDF...")
         self.open_btn.setEnabled(False)
         self.thread = MergeThread(inputs, out)
         self.thread.finished_signal.connect(self.on_finished)
@@ -166,9 +153,11 @@ class PdfMergePage(QWidget):
     def on_finished(self, out: str):
         self.output_edit.setText(out)
         self.open_btn.setEnabled(Path(out).exists())
+        self.action_row.set_success(f"处理完成：{out}")
         QMessageBox.information(self, "完成", out)
 
     def on_error(self, msg: str):
+        self.action_row.set_error(msg)
         QMessageBox.critical(self, "错误", msg)
 
     def on_thread_done(self):

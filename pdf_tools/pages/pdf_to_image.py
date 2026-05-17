@@ -1,81 +1,12 @@
-import html
 import io
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QThread, Signal, QUrl
-from PySide6.QtGui import QDesktopServices, QDragEnterEvent, QDropEvent
-from PySide6.QtWidgets import QComboBox, QFileDialog, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QProgressBar, QPushButton, QRadioButton, QSpinBox, QVBoxLayout, QWidget
+from PySide6.QtCore import QThread, Signal, QUrl
+from PySide6.QtGui import QDesktopServices
+from PySide6.QtWidgets import QComboBox, QFileDialog, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QRadioButton, QSpinBox, QVBoxLayout, QWidget
 
 from ..auth_ui import require_authorization
-
-
-class DropArea(QLabel):
-    file_selected = Signal(Path)
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.setText("点击或拖拽PDF文件到此处")
-        self.setStyleSheet(
-            """
-            QLabel {
-                border: 2px dashed #aaa;
-                border-radius: 10px;
-                padding: 14px;
-                background-color: #f9f9f9;
-                color: #555;
-                font-size: 14px;
-            }
-            QLabel:hover {
-                background-color: #eef;
-                border-color: #88d;
-            }
-            """
-        )
-        self.setAcceptDrops(True)
-        self.setMinimumHeight(60)
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
-
-    def dragEnterEvent(self, event: QDragEnterEvent):
-        if event.mimeData().hasUrls():
-            for url in event.mimeData().urls():
-                if url.toLocalFile().lower().endswith(".pdf"):
-                    event.acceptProposedAction()
-                    return
-        event.ignore()
-
-    def dropEvent(self, event: QDropEvent):
-        for url in event.mimeData().urls():
-            f = url.toLocalFile()
-            if f.lower().endswith(".pdf"):
-                self.update_file(Path(f))
-                break
-        event.acceptProposedAction()
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            f, _ = QFileDialog.getOpenFileName(self, "选择PDF", "", "PDF (*.pdf)")
-            if f:
-                self.update_file(Path(f))
-
-    def update_file(self, path: Path):
-        name = html.escape(path.name)
-        full = html.escape(str(path.absolute()))
-        self.setText(f"<div style='line-height:1.7'>{name}<br/>{full}</div>")
-        self.setTextFormat(Qt.TextFormat.RichText)
-        self.setStyleSheet(
-            """
-            QLabel {
-                border: 2px solid #4caf50;
-                border-radius: 10px;
-                padding: 14px;
-                background-color: #e8f5e9;
-                color: #2e7d32;
-                font-size: 14px;
-            }
-            """
-        )
-        self.file_selected.emit(path)
+from ..ui_components import ActionRow, DropArea, PathSelectorRow, Section, create_page_header
 
 
 class PdfToImageThread(QThread):
@@ -107,8 +38,8 @@ class PdfToImageThread(QThread):
                 for i in range(doc.page_count):
                     page = doc.load_page(i)
                     pix = page.get_pixmap(matrix=mat, alpha=False)
-                    out = out_dir / f"{Path(self.pdf_path).stem}_page{i+1:03d}.{self.fmt}"
-                    if self.fmt in {"png"}:
+                    out = out_dir / f"{Path(self.pdf_path).stem}_page{i + 1:03d}.{self.fmt}"
+                    if self.fmt == "png":
                         pix.save(str(out))
                     else:
                         img = Image.open(io.BytesIO(pix.tobytes("png")))
@@ -133,7 +64,7 @@ class PdfToImageThread(QThread):
                 heights.append(img.height)
 
             if not images:
-                raise RuntimeError("PDF没有可转换页面")
+                raise RuntimeError("PDF 没有可转换页面")
 
             max_w = max(widths)
             total_h = sum(heights)
@@ -167,72 +98,63 @@ class PdfToImagePage(QWidget):
         self.thread: PdfToImageThread | None = None
         self.last_output: str | None = None
 
-        lay = QVBoxLayout(self)
-        lay.setContentsMargins(12, 12, 12, 12)
-        lay.setSpacing(12)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(22, 22, 22, 22)
+        layout.setSpacing(16)
+        layout.addWidget(create_page_header("PDF 转图片", "将 PDF 页面导出为图片，支持逐页导出或合并成长图。"))
 
-        title = QLabel("PDF转图片")
-        title.setAlignment(Qt.AlignmentFlag.AlignLeft)
-        lay.addWidget(title)
-
+        input_section = Section("输入文件")
         self.drop_area = DropArea()
         self.drop_area.file_selected.connect(self.on_file_selected)
-        lay.addWidget(self.drop_area)
+        input_section.body.addWidget(self.drop_area)
+        layout.addWidget(input_section)
 
-        r1 = QHBoxLayout()
+        param_section = Section("转换参数")
+        format_row = QHBoxLayout()
         self.format_combo = QComboBox()
         self.format_combo.addItems(["png", "jpg", "jpeg"])
         self.dpi_spin = QSpinBox()
         self.dpi_spin.setMinimum(72)
         self.dpi_spin.setMaximum(600)
         self.dpi_spin.setValue(150)
-        r1.addWidget(QLabel("格式"))
-        r1.addWidget(self.format_combo)
-        r1.addWidget(QLabel("DPI"))
-        r1.addWidget(self.dpi_spin)
-        r1.addStretch(1)
-        lay.addLayout(r1)
+        format_row.addWidget(QLabel("格式"))
+        format_row.addWidget(self.format_combo)
+        format_row.addWidget(QLabel("DPI"))
+        format_row.addWidget(self.dpi_spin)
+        format_row.addStretch(1)
+        param_section.body.addLayout(format_row)
 
-        r2 = QHBoxLayout()
+        mode_row = QHBoxLayout()
         self.mode_pages = QRadioButton("每页一张")
         self.mode_single = QRadioButton("合并为一张")
         self.mode_pages.setChecked(True)
-        r2.addWidget(QLabel("输出模式"))
-        r2.addWidget(self.mode_pages)
-        r2.addWidget(self.mode_single)
-        r2.addStretch(1)
-        lay.addLayout(r2)
+        mode_row.addWidget(QLabel("输出模式"))
+        mode_row.addWidget(self.mode_pages)
+        mode_row.addWidget(self.mode_single)
+        mode_row.addStretch(1)
+        param_section.body.addLayout(mode_row)
 
-        r3 = QHBoxLayout()
-        self.out_dir_edit = QLineEdit()
-        self.out_dir_edit.setReadOnly(True)
-        self.out_dir_btn = QPushButton("选择文件夹")
-        r3.addWidget(QLabel("输出文件夹"))
-        r3.addWidget(self.out_dir_edit, 1)
-        r3.addWidget(self.out_dir_btn)
-        lay.addLayout(r3)
-
-        r4 = QHBoxLayout()
+        name_row = QHBoxLayout()
         self.single_name_edit = QLineEdit()
-        self.single_name_edit.setPlaceholderText("合并为一张时输出文件名(可选)")
-        r4.addWidget(QLabel("文件名"))
-        r4.addWidget(self.single_name_edit, 1)
-        lay.addLayout(r4)
+        self.single_name_edit.setPlaceholderText("合并为一张时的输出文件名，可选")
+        name_row.addWidget(QLabel("文件名"))
+        name_row.addWidget(self.single_name_edit, 1)
+        param_section.body.addLayout(name_row)
+        layout.addWidget(param_section)
 
-        r5 = QHBoxLayout()
-        self.open_btn = QPushButton("打开输出")
-        self.open_btn.setEnabled(False)
-        r5.addStretch(1)
-        r5.addWidget(self.open_btn)
-        lay.addLayout(r5)
+        output_section = Section("输出位置")
+        self.out_dir_row = PathSelectorRow("输出文件夹", "选择文件夹", "打开输出", "输出文件夹")
+        self.out_dir_edit = self.out_dir_row.edit
+        self.out_dir_btn = self.out_dir_row.choose_btn
+        self.open_btn = self.out_dir_row.open_btn
+        output_section.body.addWidget(self.out_dir_row)
+        layout.addWidget(output_section)
 
-        self.progress = QProgressBar()
-        self.progress.setRange(0, 0)
-        self.progress.hide()
-        lay.addWidget(self.progress)
-
-        self.convert_btn = QPushButton("开始转换")
-        lay.addWidget(self.convert_btn, 0, Qt.AlignmentFlag.AlignLeft)
+        self.action_row = ActionRow("开始转换")
+        self.progress = self.action_row.progress
+        self.convert_btn = self.action_row.button
+        layout.addWidget(self.action_row)
+        layout.addStretch(1)
 
         self.out_dir_btn.clicked.connect(self.on_choose_out_dir)
         self.open_btn.clicked.connect(self.on_open)
@@ -252,16 +174,16 @@ class PdfToImagePage(QWidget):
 
     def on_choose_out_dir(self):
         start_dir = self.out_dir_edit.text().strip() or ""
-        d = QFileDialog.getExistingDirectory(self, "选择输出文件夹", start_dir)
-        if d:
-            self.out_dir_edit.setText(d)
+        directory = QFileDialog.getExistingDirectory(self, "选择输出文件夹", start_dir)
+        if directory:
+            self.out_dir_edit.setText(directory)
 
     def on_open(self):
         if not self.last_output:
             return
-        p = Path(self.last_output)
-        if p.exists():
-            QDesktopServices.openUrl(QUrl.fromLocalFile(str(p)))
+        path = Path(self.last_output)
+        if path.exists():
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
         else:
             QMessageBox.warning(self, "提示", "输出不存在")
 
@@ -270,21 +192,24 @@ class PdfToImagePage(QWidget):
             return
         inp = self.current_pdf_path
         if not inp or not inp.is_file():
-            QMessageBox.warning(self, "提示", "请选择输入PDF")
+            QMessageBox.warning(self, "提示", "请选择输入 PDF")
             return
         out_dir = self.out_dir_edit.text().strip()
         if not out_dir:
             QMessageBox.warning(self, "提示", "请选择输出文件夹")
             return
-        fmt = self.format_combo.currentText().strip().lower()
-        dpi = int(self.dpi_spin.value())
-        mode = "pages" if self.mode_pages.isChecked() else "single"
-        single_name = self.single_name_edit.text().strip()
 
-        self.progress.show()
-        self.convert_btn.setEnabled(False)
+        mode = "pages" if self.mode_pages.isChecked() else "single"
+        self.action_row.set_processing("正在转换为图片...")
         self.open_btn.setEnabled(False)
-        self.thread = PdfToImageThread(str(inp), out_dir, fmt, dpi, mode, single_name)
+        self.thread = PdfToImageThread(
+            str(inp),
+            out_dir,
+            self.format_combo.currentText().strip().lower(),
+            int(self.dpi_spin.value()),
+            mode,
+            self.single_name_edit.text().strip(),
+        )
         self.thread.finished_signal.connect(self.on_finished)
         self.thread.error_signal.connect(self.on_error)
         self.thread.finished.connect(self.on_thread_done)
@@ -293,9 +218,11 @@ class PdfToImagePage(QWidget):
     def on_finished(self, out: str):
         self.last_output = out
         self.open_btn.setEnabled(True)
+        self.action_row.set_success(f"处理完成：{out}")
         QMessageBox.information(self, "完成", out)
 
     def on_error(self, msg: str):
+        self.action_row.set_error(msg)
         QMessageBox.critical(self, "错误", msg)
 
     def on_thread_done(self):

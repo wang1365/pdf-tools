@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer, QUrl
+from PySide6.QtCore import QTimer, QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QLabel, QMessageBox, QPushButton, QVBoxLayout, QWidget
 
@@ -14,6 +14,7 @@ from .authorization import (
     poll_device_binding,
     start_device_binding,
 )
+from .ui_components import Section, StatusLabel, create_page_header
 
 
 def require_authorization(parent: QWidget | None = None) -> bool:
@@ -34,39 +35,42 @@ class AuthPage(QWidget):
         self.timer.setInterval(3000)
         self.timer.timeout.connect(self.on_poll)
 
-        lay = QVBoxLayout(self)
-        lay.setContentsMargins(12, 12, 12, 12)
-        lay.setSpacing(12)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(22, 22, 22, 22)
+        layout.setSpacing(16)
 
-        title = QLabel("授权中心")
-        title.setAlignment(Qt.AlignmentFlag.AlignLeft)
-        title.setStyleSheet("font-size: 18px; font-weight: 700;")
-        lay.addWidget(title)
+        layout.addWidget(create_page_header("授权中心", "管理当前设备的在线订阅绑定与离线 License。"))
 
-        self.status_label = QLabel("")
-        self.status_label.setWordWrap(True)
-        lay.addWidget(self.status_label)
+        status_section = Section("授权状态")
+        self.status_label = StatusLabel("")
+        status_section.body.addWidget(self.status_label)
+        layout.addWidget(status_section)
 
+        device_section = Section("设备信息")
         self.device_label = QLabel(f"设备指纹：{get_device_fingerprint()}")
         self.device_label.setWordWrap(True)
-        lay.addWidget(self.device_label)
+        device_section.body.addWidget(self.device_label)
+        layout.addWidget(device_section)
 
+        binding_section = Section("在线绑定")
         self.code_label = QLabel("绑定码：-")
-        self.code_label.setStyleSheet("font-size: 20px; font-weight: 700; letter-spacing: 2px;")
-        lay.addWidget(self.code_label)
+        self.code_label.setStyleSheet("font-size: 22px; font-weight: 700; letter-spacing: 2px; color: #1d4f91;")
+        binding_section.body.addWidget(self.code_label)
 
-        row = QHBoxLayout()
+        action_row = QHBoxLayout()
         self.bind_btn = QPushButton("生成在线绑定码")
+        self.bind_btn.setObjectName("PrimaryButton")
         self.open_confirm_btn = QPushButton("打开网页确认")
         self.import_btn = QPushButton("导入离线 License")
         self.refresh_btn = QPushButton("刷新状态")
-        row.addWidget(self.bind_btn)
-        row.addWidget(self.open_confirm_btn)
-        row.addWidget(self.import_btn)
-        row.addWidget(self.refresh_btn)
-        row.addStretch(1)
-        lay.addLayout(row)
-        lay.addStretch(1)
+        action_row.addWidget(self.bind_btn)
+        action_row.addWidget(self.open_confirm_btn)
+        action_row.addWidget(self.import_btn)
+        action_row.addWidget(self.refresh_btn)
+        action_row.addStretch(1)
+        binding_section.body.addLayout(action_row)
+        layout.addWidget(binding_section)
+        layout.addStretch(1)
 
         self.open_confirm_btn.setEnabled(False)
         self.bind_btn.clicked.connect(self.on_start_binding)
@@ -77,8 +81,10 @@ class AuthPage(QWidget):
 
     def refresh_status(self):
         result = get_authorization_status(self.store)
-        prefix = "已授权" if result.valid else "未授权"
-        self.status_label.setText(f"{prefix}：{result.message}")
+        if result.valid:
+            self.status_label.set_success(f"已授权：{result.message}")
+        else:
+            self.status_label.set_error(f"未授权：{result.message}")
 
     def on_start_binding(self):
         try:

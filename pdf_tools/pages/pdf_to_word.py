@@ -1,92 +1,12 @@
-import html
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QThread, Signal, QUrl
-from PySide6.QtGui import QDesktopServices, QDragEnterEvent, QDropEvent
-from PySide6.QtWidgets import QCheckBox, QFileDialog, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QProgressBar, QPushButton, QSpinBox, QVBoxLayout, QWidget
+from PySide6.QtCore import QThread, Signal, QUrl
+from PySide6.QtGui import QDesktopServices
+from PySide6.QtWidgets import QCheckBox, QFileDialog, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton, QSpinBox, QVBoxLayout, QWidget
 
 from ..auth_ui import require_authorization
 from ..converter import convert_pdf_to_docx
-
-
-class DropArea(QLabel):
-    file_selected = Signal(Path)
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.setText("点击或拖拽PDF文件到此处")
-        self.setStyleSheet(
-            """
-            QLabel {
-                border: 2px dashed #aaa;
-                border-radius: 10px;
-                padding: 14px;
-                background-color: #f9f9f9;
-                color: #555;
-                font-size: 14px;
-            }
-            QLabel:hover {
-                background-color: #eef;
-                border-color: #88d;
-            }
-            """
-        )
-        self.setAcceptDrops(True)
-        self.setMinimumHeight(60)
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
-
-    def dragEnterEvent(self, event: QDragEnterEvent):
-        if event.mimeData().hasUrls():
-            for url in event.mimeData().urls():
-                if url.toLocalFile().lower().endswith(".pdf"):
-                    event.acceptProposedAction()
-                    return
-        event.ignore()
-
-    def dropEvent(self, event: QDropEvent):
-        for url in event.mimeData().urls():
-            f = url.toLocalFile()
-            if f.lower().endswith(".pdf"):
-                self.update_file(Path(f))
-                break
-        event.acceptProposedAction()
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            f, _ = QFileDialog.getOpenFileName(self, "选择PDF", "", "PDF (*.pdf)")
-            if f:
-                self.update_file(Path(f))
-
-    def update_file(self, path: Path):
-        size_str = self.format_size(path.stat().st_size)
-        name = html.escape(path.name)
-        full = html.escape(str(path.absolute()))
-        self.setText(f"<div style='line-height:1.7'>{name} ({size_str})<br/>{full}</div>")
-        self.setTextFormat(Qt.TextFormat.RichText)
-        self.setStyleSheet(
-            """
-            QLabel {
-                border: 2px solid #4caf50;
-                border-radius: 10px;
-                padding: 14px;
-                background-color: #e8f5e9;
-                color: #2e7d32;
-                font-size: 14px;
-            }
-            """
-        )
-        self.file_selected.emit(path)
-
-    def format_size(self, size: int) -> str:
-        value = float(size)
-        for unit in ["B", "KB", "MB", "GB", "TB"]:
-            if value < 1024:
-                if unit == "B":
-                    return f"{int(value)} {unit}"
-                return f"{value:.2f} {unit}"
-            value /= 1024
-        return f"{value:.2f} PB"
+from ..ui_components import ActionRow, DropArea, Section, create_page_header
 
 
 class ConvertThread(QThread):
@@ -115,37 +35,45 @@ class PdfToWordPage(QWidget):
         self.user_set_output_dir = False
         self.thread: ConvertThread | None = None
 
-        lay = QVBoxLayout(self)
-        lay.setSpacing(16)
-        lay.setContentsMargins(12, 12, 12, 12)
+        layout = QVBoxLayout(self)
+        layout.setSpacing(16)
+        layout.setContentsMargins(22, 22, 22, 22)
+        layout.addWidget(create_page_header("PDF 转 Word", "将 PDF 转换为 DOCX 文档，可按页码范围导出。"))
 
+        input_section = Section("输入文件")
         self.drop_area = DropArea()
         self.drop_area.file_selected.connect(self.on_file_selected)
-        lay.addWidget(self.drop_area)
+        input_section.body.addWidget(self.drop_area)
+        layout.addWidget(input_section)
 
-        r2 = QHBoxLayout()
+        output_section = Section("输出位置")
+        output_row = QHBoxLayout()
         self.output_dir_edit = QLineEdit()
         self.output_dir_btn = QPushButton("选择文件夹")
-        r2.addWidget(QLabel("保存文件夹"))
-        r2.addWidget(self.output_dir_edit, 1)
-        r2.addWidget(self.output_dir_btn)
+        output_row.addWidget(QLabel("保存文件夹"))
+        output_row.addWidget(self.output_dir_edit, 1)
+        output_row.addWidget(self.output_dir_btn)
+        output_section.body.addLayout(output_row)
 
+        file_row = QHBoxLayout()
         self.filename_edit = QLineEdit()
-        r2.addWidget(QLabel("文件名"))
-        r2.addWidget(self.filename_edit, 1)
-        lay.addLayout(r2)
+        file_row.addWidget(QLabel("文件名"))
+        file_row.addWidget(self.filename_edit, 1)
+        output_section.body.addLayout(file_row)
 
-        r3 = QHBoxLayout()
+        full_path_row = QHBoxLayout()
         self.full_path_edit = QLineEdit()
         self.full_path_edit.setReadOnly(True)
         self.open_file_btn = QPushButton("打开文件")
         self.open_file_btn.setEnabled(False)
-        r3.addWidget(QLabel("完整路径"))
-        r3.addWidget(self.full_path_edit, 1)
-        r3.addWidget(self.open_file_btn)
-        lay.addLayout(r3)
+        full_path_row.addWidget(QLabel("完整路径"))
+        full_path_row.addWidget(self.full_path_edit, 1)
+        full_path_row.addWidget(self.open_file_btn)
+        output_section.body.addLayout(full_path_row)
+        layout.addWidget(output_section)
 
-        r4 = QHBoxLayout()
+        param_section = Section("转换参数")
+        page_row = QHBoxLayout()
         self.start_spin = QSpinBox()
         self.start_spin.setMinimum(0)
         self.start_spin.setSpecialValueText("")
@@ -153,22 +81,22 @@ class PdfToWordPage(QWidget):
         self.end_spin = QSpinBox()
         self.end_spin.setMinimum(0)
         self.end_spin.setSpecialValueText("")
-        r4.addWidget(QLabel("开始页(0基)"))
-        r4.addWidget(self.start_spin)
-        r4.addWidget(QLabel("结束页(含)"))
-        r4.addWidget(self.end_spin)
-        lay.addLayout(r4)
+        page_row.addWidget(QLabel("开始页（0 基）"))
+        page_row.addWidget(self.start_spin)
+        page_row.addWidget(QLabel("结束页（包含）"))
+        page_row.addWidget(self.end_spin)
+        page_row.addStretch(1)
+        param_section.body.addLayout(page_row)
 
         self.overwrite_cb = QCheckBox("覆盖已存在输出")
-        lay.addWidget(self.overwrite_cb)
+        param_section.body.addWidget(self.overwrite_cb)
+        layout.addWidget(param_section)
 
-        self.progress = QProgressBar()
-        self.progress.setRange(0, 0)
-        self.progress.hide()
-        lay.addWidget(self.progress)
-
-        self.convert_btn = QPushButton("开始转换")
-        lay.addWidget(self.convert_btn, 0, Qt.AlignmentFlag.AlignLeft)
+        self.action_row = ActionRow("开始转换")
+        self.progress = self.action_row.progress
+        self.convert_btn = self.action_row.button
+        layout.addWidget(self.action_row)
+        layout.addStretch(1)
 
         self.output_dir_btn.clicked.connect(self.on_browse_output_dir)
         self.open_file_btn.clicked.connect(self.on_open_file)
@@ -184,10 +112,10 @@ class PdfToWordPage(QWidget):
         self.update_full_path()
 
     def update_full_path(self):
-        d = self.output_dir_edit.text().strip()
-        f = self.filename_edit.text().strip()
-        if d and f:
-            full = str(Path(d) / f)
+        directory = self.output_dir_edit.text().strip()
+        filename = self.filename_edit.text().strip()
+        if directory and filename:
+            full = str(Path(directory) / filename)
             self.full_path_edit.setText(full)
             self.open_file_btn.setEnabled(Path(full).exists())
         else:
@@ -196,15 +124,15 @@ class PdfToWordPage(QWidget):
 
     def on_browse_output_dir(self):
         start_dir = self.output_dir_edit.text().strip() or ""
-        d = QFileDialog.getExistingDirectory(self, "选择保存文件夹", start_dir)
-        if d:
+        directory = QFileDialog.getExistingDirectory(self, "选择保存文件夹", start_dir)
+        if directory:
             self.user_set_output_dir = True
-            self.output_dir_edit.setText(d)
+            self.output_dir_edit.setText(directory)
 
     def on_open_file(self):
-        p = self.full_path_edit.text().strip()
-        if p and Path(p).exists():
-            QDesktopServices.openUrl(QUrl.fromLocalFile(p))
+        path = self.full_path_edit.text().strip()
+        if path and Path(path).exists():
+            QDesktopServices.openUrl(QUrl.fromLocalFile(path))
         else:
             QMessageBox.warning(self, "提示", "文件不存在")
 
@@ -214,7 +142,7 @@ class PdfToWordPage(QWidget):
         inp = self.current_pdf_path
         out = self.full_path_edit.text().strip()
         if not inp:
-            QMessageBox.warning(self, "提示", "请选择输入PDF")
+            QMessageBox.warning(self, "提示", "请选择输入 PDF")
             return
         if not inp.is_file():
             QMessageBox.warning(self, "提示", "输入文件不存在")
@@ -223,19 +151,18 @@ class PdfToWordPage(QWidget):
             QMessageBox.warning(self, "提示", "无效的输出路径")
             return
 
-        op = Path(out)
-        if op.exists() and not self.overwrite_cb.isChecked():
-            r = QMessageBox.question(self, "确认", "输出已存在，是否覆盖？")
-            if r != QMessageBox.Yes:
+        output_path = Path(out)
+        if output_path.exists() and not self.overwrite_cb.isChecked():
+            reply = QMessageBox.question(self, "确认", "输出文件已存在，是否覆盖？")
+            if reply != QMessageBox.Yes:
                 return
 
-        s = self.start_spin.value()
-        e = self.end_spin.value() if self.end_spin.value() != 0 else None
+        start_page = self.start_spin.value()
+        end_page = self.end_spin.value() if self.end_spin.value() != 0 else None
 
-        self.progress.show()
-        self.convert_btn.setEnabled(False)
+        self.action_row.set_processing("正在转换为 Word...")
         self.open_file_btn.setEnabled(False)
-        self.thread = ConvertThread(str(inp), out, s if s != 0 else None, e)
+        self.thread = ConvertThread(str(inp), out, start_page if start_page != 0 else None, end_page)
         self.thread.finished_signal.connect(self.on_finished)
         self.thread.error_signal.connect(self.on_error)
         self.thread.finished.connect(self.on_thread_done)
@@ -244,12 +171,13 @@ class PdfToWordPage(QWidget):
     def on_finished(self, path: str):
         self.update_full_path()
         self.open_file_btn.setEnabled(Path(path).exists())
+        self.action_row.set_success(f"处理完成：{path}")
         QMessageBox.information(self, "完成", path)
 
     def on_error(self, msg: str):
+        self.action_row.set_error(msg)
         QMessageBox.critical(self, "错误", msg)
 
     def on_thread_done(self):
         self.progress.hide()
         self.convert_btn.setEnabled(True)
-

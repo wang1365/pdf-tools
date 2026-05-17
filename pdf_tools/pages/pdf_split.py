@@ -1,80 +1,11 @@
-import html
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QThread, Signal, QUrl
-from PySide6.QtGui import QDesktopServices, QDragEnterEvent, QDropEvent
-from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QProgressBar, QPushButton, QSpinBox, QVBoxLayout, QWidget
+from PySide6.QtCore import QThread, Signal, QUrl
+from PySide6.QtGui import QDesktopServices
+from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QSpinBox, QVBoxLayout, QWidget
 
 from ..auth_ui import require_authorization
-
-
-class DropArea(QLabel):
-    file_selected = Signal(Path)
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.setText("点击或拖拽PDF文件到此处")
-        self.setStyleSheet(
-            """
-            QLabel {
-                border: 2px dashed #aaa;
-                border-radius: 10px;
-                padding: 14px;
-                background-color: #f9f9f9;
-                color: #555;
-                font-size: 14px;
-            }
-            QLabel:hover {
-                background-color: #eef;
-                border-color: #88d;
-            }
-            """
-        )
-        self.setAcceptDrops(True)
-        self.setMinimumHeight(60)
-        self.setCursor(Qt.CursorShape.PointingHandCursor)
-
-    def dragEnterEvent(self, event: QDragEnterEvent):
-        if event.mimeData().hasUrls():
-            for url in event.mimeData().urls():
-                if url.toLocalFile().lower().endswith(".pdf"):
-                    event.acceptProposedAction()
-                    return
-        event.ignore()
-
-    def dropEvent(self, event: QDropEvent):
-        for url in event.mimeData().urls():
-            f = url.toLocalFile()
-            if f.lower().endswith(".pdf"):
-                self.update_file(Path(f))
-                break
-        event.acceptProposedAction()
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            f, _ = QFileDialog.getOpenFileName(self, "选择PDF", "", "PDF (*.pdf)")
-            if f:
-                self.update_file(Path(f))
-
-    def update_file(self, path: Path):
-        name = html.escape(path.name)
-        full = html.escape(str(path.absolute()))
-        self.setText(f"<div style='line-height:1.7'>{name}<br/>{full}</div>")
-        self.setTextFormat(Qt.TextFormat.RichText)
-        self.setStyleSheet(
-            """
-            QLabel {
-                border: 2px solid #4caf50;
-                border-radius: 10px;
-                padding: 14px;
-                background-color: #e8f5e9;
-                color: #2e7d32;
-                font-size: 14px;
-            }
-            """
-        )
-        self.file_selected.emit(path)
+from ..ui_components import ActionRow, DropArea, PathSelectorRow, Section, create_page_header
 
 
 class SplitThread(QThread):
@@ -119,58 +50,49 @@ class PdfSplitPage(QWidget):
         self.thread: SplitThread | None = None
         self.last_out_dir: Path | None = None
 
-        lay = QVBoxLayout(self)
-        lay.setContentsMargins(12, 12, 12, 12)
-        lay.setSpacing(12)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(22, 22, 22, 22)
+        layout.setSpacing(16)
+        layout.addWidget(create_page_header("PDF 分割", "按固定页数拆分 PDF，输出到指定文件夹。"))
 
-        title = QLabel("PDF分割")
-        title.setAlignment(Qt.AlignmentFlag.AlignLeft)
-        lay.addWidget(title)
-
+        input_section = Section("输入文件")
         self.drop_area = DropArea()
         self.drop_area.file_selected.connect(self.on_file_selected)
-        lay.addWidget(self.drop_area)
+        input_section.body.addWidget(self.drop_area)
+        layout.addWidget(input_section)
 
-        r1 = QHBoxLayout()
+        param_section = Section("分割参数")
+        pages_row = QHBoxLayout()
         self.pages_spin = QSpinBox()
         self.pages_spin.setMinimum(1)
         self.pages_spin.setMaximum(10000)
         self.pages_spin.setValue(10)
-        r1.addWidget(QLabel("每份页数"))
-        r1.addWidget(self.pages_spin)
-        r1.addStretch(1)
-        lay.addLayout(r1)
+        pages_row.addWidget(QLabel("每份页数"))
+        pages_row.addWidget(self.pages_spin)
+        pages_row.addStretch(1)
+        param_section.body.addLayout(pages_row)
 
-        r2 = QHBoxLayout()
-        self.out_dir_edit = QLineEdit()
-        self.out_dir_edit.setReadOnly(True)
-        self.out_dir_btn = QPushButton("选择文件夹")
-        r2.addWidget(QLabel("输出文件夹"))
-        r2.addWidget(self.out_dir_edit, 1)
-        r2.addWidget(self.out_dir_btn)
-        lay.addLayout(r2)
-
-        r3 = QHBoxLayout()
+        name_row = QHBoxLayout()
         self.base_name_edit = QLineEdit()
         self.base_name_edit.setPlaceholderText("输出文件前缀")
-        r3.addWidget(QLabel("文件前缀"))
-        r3.addWidget(self.base_name_edit, 1)
-        lay.addLayout(r3)
+        name_row.addWidget(QLabel("文件前缀"))
+        name_row.addWidget(self.base_name_edit, 1)
+        param_section.body.addLayout(name_row)
+        layout.addWidget(param_section)
 
-        r4 = QHBoxLayout()
-        self.open_dir_btn = QPushButton("打开文件夹")
-        self.open_dir_btn.setEnabled(False)
-        r4.addStretch(1)
-        r4.addWidget(self.open_dir_btn)
-        lay.addLayout(r4)
+        output_section = Section("输出位置")
+        self.out_dir_row = PathSelectorRow("输出文件夹", "选择文件夹", "打开文件夹", "输出文件夹")
+        self.out_dir_edit = self.out_dir_row.edit
+        self.out_dir_btn = self.out_dir_row.choose_btn
+        self.open_dir_btn = self.out_dir_row.open_btn
+        output_section.body.addWidget(self.out_dir_row)
+        layout.addWidget(output_section)
 
-        self.progress = QProgressBar()
-        self.progress.setRange(0, 0)
-        self.progress.hide()
-        lay.addWidget(self.progress)
-
-        self.split_btn = QPushButton("开始分割")
-        lay.addWidget(self.split_btn, 0, Qt.AlignmentFlag.AlignLeft)
+        self.action_row = ActionRow("开始分割")
+        self.progress = self.action_row.progress
+        self.split_btn = self.action_row.button
+        layout.addWidget(self.action_row)
+        layout.addStretch(1)
 
         self.out_dir_btn.clicked.connect(self.on_choose_out_dir)
         self.open_dir_btn.clicked.connect(self.on_open_out_dir)
@@ -185,9 +107,9 @@ class PdfSplitPage(QWidget):
 
     def on_choose_out_dir(self):
         start_dir = self.out_dir_edit.text().strip() or ""
-        d = QFileDialog.getExistingDirectory(self, "选择输出文件夹", start_dir)
-        if d:
-            self.out_dir_edit.setText(d)
+        directory = QFileDialog.getExistingDirectory(self, "选择输出文件夹", start_dir)
+        if directory:
+            self.out_dir_edit.setText(directory)
 
     def on_open_out_dir(self):
         if self.last_out_dir and self.last_out_dir.exists():
@@ -200,7 +122,7 @@ class PdfSplitPage(QWidget):
             return
         inp = self.current_pdf_path
         if not inp or not inp.is_file():
-            QMessageBox.warning(self, "提示", "请选择输入PDF")
+            QMessageBox.warning(self, "提示", "请选择输入 PDF")
             return
         out_dir = self.out_dir_edit.text().strip()
         if not out_dir:
@@ -209,8 +131,7 @@ class PdfSplitPage(QWidget):
         base = self.base_name_edit.text().strip() or inp.stem
         pages_per = int(self.pages_spin.value())
 
-        self.progress.show()
-        self.split_btn.setEnabled(False)
+        self.action_row.set_processing("正在分割 PDF...")
         self.open_dir_btn.setEnabled(False)
         self.thread = SplitThread(str(inp), out_dir, pages_per, base)
         self.thread.finished_signal.connect(self.on_finished)
@@ -221,9 +142,11 @@ class PdfSplitPage(QWidget):
     def on_finished(self, out_dir: str):
         self.last_out_dir = Path(out_dir)
         self.open_dir_btn.setEnabled(True)
+        self.action_row.set_success(f"处理完成：{out_dir}")
         QMessageBox.information(self, "完成", out_dir)
 
     def on_error(self, msg: str):
+        self.action_row.set_error(msg)
         QMessageBox.critical(self, "错误", msg)
 
     def on_thread_done(self):

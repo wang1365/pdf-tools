@@ -1,0 +1,26 @@
+<h2>这次界面优化先聚焦哪里？</h2>
+<p class="subtitle">我已经看到项目里同时有 PySide6 桌面端和 Next.js 官网/账户站。请选择本轮主要优化范围。</p>
+
+<div class="options">
+  <div class="option" data-choice="desktop" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>桌面端主程序</h3>
+      <p>优化 PySide6 工具箱界面：导航、授权中心、文件选择区、输出设置、执行状态、按钮层级和各 PDF 工具页面一致性。</p>
+    </div>
+  </div>
+  <div class="option" data-choice="website" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>官网/账户站</h3>
+      <p>优化 Next.js 站点首页、下载页、价格页、登录和账户中心的信息架构、视觉层级、中文文案和响应式布局。</p>
+    </div>
+  </div>
+  <div class="option" data-choice="both-desktop-first" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>两边都看，先改桌面端</h3>
+      <p>把官网作为品牌延展参考，但本轮代码优先落在桌面端，让产品使用体验先变得专业、稳定、统一。</p>
+    </div>
+  </div>
+</div>
