@@ -4,6 +4,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication, QFrame, QHBoxLayout, QListWidget, QListWidgetItem, QMainWindow, QStackedWidget, QWidget
 
+from .auth_ui import AuthPage
 from .pages.pdf_compress import PdfCompressPage
 from .pages.pdf_encrypt import PdfEncryptPage
 from .pages.pdf_merge import PdfMergePage
@@ -44,6 +45,7 @@ class MainWindow(QMainWindow):
         self.stack.setFrameShape(QFrame.Shape.NoFrame)
 
         self.pages = [
+            ("授权中心", AuthPage()),
             ("PDF合并", PdfMergePage()),
             ("PDF分割", PdfSplitPage()),
             ("PDF压缩", PdfCompressPage()),
@@ -62,4 +64,4 @@ class MainWindow(QMainWindow):
         lay.addWidget(self.stack, 1)
 
         self.nav.currentRowChanged.connect(self.stack.setCurrentIndex)
-        self.nav.setCurrentRow(3)
+        self.nav.setCurrentRow(0)

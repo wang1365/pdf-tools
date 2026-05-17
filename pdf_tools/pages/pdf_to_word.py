@@ -5,6 +5,7 @@ from PySide6.QtCore import Qt, QThread, Signal, QUrl
 from PySide6.QtGui import QDesktopServices, QDragEnterEvent, QDropEvent
 from PySide6.QtWidgets import QCheckBox, QFileDialog, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QProgressBar, QPushButton, QSpinBox, QVBoxLayout, QWidget
 
+from ..auth_ui import require_authorization
 from ..converter import convert_pdf_to_docx
 
 
@@ -208,6 +209,8 @@ class PdfToWordPage(QWidget):
             QMessageBox.warning(self, "提示", "文件不存在")
 
     def on_convert(self):
+        if not require_authorization(self):
+            return
         inp = self.current_pdf_path
         out = self.full_path_edit.text().strip()
         if not inp:

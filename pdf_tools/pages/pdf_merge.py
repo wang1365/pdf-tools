@@ -4,6 +4,8 @@ from PySide6.QtCore import Qt, QThread, Signal, QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QProgressBar, QPushButton, QVBoxLayout, QWidget
 
+from ..auth_ui import require_authorization
+
 
 class MergeThread(QThread):
     finished_signal = Signal(str)
@@ -138,6 +140,8 @@ class PdfMergePage(QWidget):
             QMessageBox.warning(self, "提示", "文件不存在")
 
     def on_merge(self):
+        if not require_authorization(self):
+            return
         inputs: list[str] = []
         for i in range(self.list_widget.count()):
             item = self.list_widget.item(i)

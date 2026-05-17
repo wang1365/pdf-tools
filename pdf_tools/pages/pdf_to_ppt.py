@@ -6,6 +6,8 @@ from PySide6.QtCore import Qt, QThread, Signal, QUrl
 from PySide6.QtGui import QDesktopServices, QDragEnterEvent, QDropEvent
 from PySide6.QtWidgets import QFileDialog, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QProgressBar, QPushButton, QSpinBox, QVBoxLayout, QWidget
 
+from ..auth_ui import require_authorization
+
 
 class DropArea(QLabel):
     file_selected = Signal(Path)
@@ -212,6 +214,8 @@ class PdfToPptPage(QWidget):
             QMessageBox.warning(self, "提示", "文件不存在")
 
     def on_convert(self):
+        if not require_authorization(self):
+            return
         inp = self.current_pdf_path
         if not inp or not inp.is_file():
             QMessageBox.warning(self, "提示", "请选择输入PDF")
