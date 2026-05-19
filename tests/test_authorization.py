@@ -14,6 +14,7 @@ sys.modules[spec.name] = authorization
 spec.loader.exec_module(authorization)
 
 AuthorizationStore = authorization.AuthorizationStore
+build_offline_device_request = authorization.build_offline_device_request
 build_canonical_json = authorization.build_canonical_json
 is_cache_valid = authorization.is_cache_valid
 verify_offline_license_document = authorization.verify_offline_license_document
@@ -34,6 +35,29 @@ class AuthorizationCoreTests(unittest.TestCase):
     def test_canonical_json_sorts_nested_keys(self):
         payload = {"b": 1, "a": {"d": 4, "c": 3}}
         self.assertEqual(build_canonical_json(payload), '{"a":{"c":3,"d":4},"b":1}')
+
+    def test_offline_device_request_uses_license_product(self):
+        request = build_offline_device_request(datetime(2026, 5, 17, tzinfo=UTC))
+
+        self.assertEqual(request["schema_version"], 1)
+        self.assertEqual(request["product"], "pdf-tools-pro")
+        self.assertTrue(request["device_fingerprint"].startswith("sha256:"))
+        self.assertEqual(request["created_at"], "2026-05-17T00:00:00Z")
+
+    def test_offline_device_request_is_not_reported_as_bad_algorithm(self):
+        result = verify_offline_license_document(
+            {
+                "schema_version": 1,
+                "product": "pdf-tools-pro",
+                "device_fingerprint": "sha256:abc",
+            },
+            expected_product="pdf-tools-pro",
+            device_fingerprint="sha256:abc",
+            public_key_pem="",
+        )
+
+        self.assertFalse(result.valid)
+        self.assertIn("设备请求文件", result.message)
 
     def test_offline_license_rejects_device_mismatch_before_signature(self):
         document = {

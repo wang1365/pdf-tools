@@ -15,7 +15,8 @@ from urllib import error, request
 PRODUCT_CODE = "pdf-tools-pro"
 REQUIRED_ENTITLEMENT = "desktop_basic_access"
 DEFAULT_SERVER_URL = os.environ.get("PDF_TOOLS_SERVER_URL", "http://localhost:3000").rstrip("/")
-PUBLIC_KEY_PEM = os.environ.get("PDF_TOOLS_LICENSE_PUBLIC_KEY", "")
+DEFAULT_LICENSE_PUBLIC_KEY_PEM = "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA4Bx0AX/czvQ/6h0kyK1kP/WTtklrD8UTD5ya3I4wHUE=\n-----END PUBLIC KEY-----\n"
+PUBLIC_KEY_PEM = os.environ.get("PDF_TOOLS_LICENSE_PUBLIC_KEY", DEFAULT_LICENSE_PUBLIC_KEY_PEM).replace("\\n", "\n").strip()
 
 
 @dataclass
@@ -96,6 +97,27 @@ def get_device_info() -> dict[str, str]:
     }
 
 
+def build_offline_device_request(now: datetime | None = None) -> dict[str, Any]:
+    device = get_device_info()
+    return {
+        "schema_version": 1,
+        "product": PRODUCT_CODE,
+        "device_fingerprint": device["deviceFingerprint"],
+        "device_name": device["deviceName"],
+        "os_name": device["osName"],
+        "os_arch": device["osArch"],
+        "app_version": device["appVersion"],
+        "created_at": (now or datetime.now(UTC)).isoformat().replace("+00:00", "Z"),
+    }
+
+
+def save_offline_device_request(path: Path) -> None:
+    path.write_text(
+        build_canonical_json(build_offline_device_request()) + "\n",
+        encoding="utf-8",
+    )
+
+
 def verify_offline_license_document(
     document: dict[str, Any],
     *,
@@ -105,6 +127,10 @@ def verify_offline_license_document(
     now: datetime | None = None,
 ) -> AuthorizationResult:
     now = now or datetime.now(UTC)
+    if "device_fingerprint" in document and "license_id" not in document:
+        return AuthorizationResult(False, "这是离线设备请求文件，不是 License。请在网页端签发并下载 .lic 文件后再导入。", "offline")
+    if not isinstance(document.get("license_id"), str) or not isinstance(document.get("signature"), str):
+        return AuthorizationResult(False, "离线 License 文件不完整，请导入网页端签发下载的 .lic 文件", "offline")
     if document.get("product") != expected_product:
         return AuthorizationResult(False, "License 产品不匹配", "offline")
     if document.get("signature_alg") != "Ed25519":
