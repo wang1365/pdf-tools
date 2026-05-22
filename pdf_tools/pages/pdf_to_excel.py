@@ -1,16 +1,7 @@
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
+import dearpygui.dearpygui as dpg
 
 
-class PdfToExcelPage(QWidget):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        lay = QVBoxLayout(self)
-        lay.setContentsMargins(12, 12, 12, 12)
-        t = QLabel("PDF转Excel")
-        t.setAlignment(Qt.AlignmentFlag.AlignLeft)
-        s = QLabel("暂未实现")
-        s.setAlignment(Qt.AlignmentFlag.AlignLeft)
-        lay.addWidget(t)
-        lay.addWidget(s)
-
+def build_page(app) -> None:
+    with dpg.group(tag="tool_excel"):
+        app.page_header("PDF 转 Excel", "该功能入口已保留，后续接入表格识别实现。")
+        dpg.add_text("暂未实现", color=(100, 116, 139))

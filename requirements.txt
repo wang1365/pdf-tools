@@ -1,5 +1,5 @@
 pdf2docx
-PySide6
+dearpygui==2.3.1
 pillow
 cairosvg
 pypdf

@@ -12,10 +12,15 @@ from pathlib import Path
 from typing import Any
 from urllib import error, request
 
+
 PRODUCT_CODE = "pdf-tools-pro"
 REQUIRED_ENTITLEMENT = "desktop_basic_access"
 DEFAULT_SERVER_URL = os.environ.get("PDF_TOOLS_SERVER_URL", "http://localhost:3000").rstrip("/")
-DEFAULT_LICENSE_PUBLIC_KEY_PEM = "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA4Bx0AX/czvQ/6h0kyK1kP/WTtklrD8UTD5ya3I4wHUE=\n-----END PUBLIC KEY-----\n"
+DEFAULT_LICENSE_PUBLIC_KEY_PEM = (
+    "-----BEGIN PUBLIC KEY-----\n"
+    "MCowBQYDK2VwAyEA4Bx0AX/czvQ/6h0kyK1kP/WTtklrD8UTD5ya3I4wHUE=\n"
+    "-----END PUBLIC KEY-----\n"
+)
 PUBLIC_KEY_PEM = os.environ.get("PDF_TOOLS_LICENSE_PUBLIC_KEY", DEFAULT_LICENSE_PUBLIC_KEY_PEM).replace("\\n", "\n").strip()
 
 
@@ -76,14 +81,7 @@ class AuthorizationStore:
 
 
 def get_device_fingerprint() -> str:
-    raw = "|".join(
-        [
-            platform.node(),
-            platform.system(),
-            platform.machine(),
-            str(uuid.getnode()),
-        ]
-    )
+    raw = "|".join([platform.node(), platform.system(), platform.machine(), str(uuid.getnode())])
     return "sha256:" + hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
@@ -112,10 +110,7 @@ def build_offline_device_request(now: datetime | None = None) -> dict[str, Any]:
 
 
 def save_offline_device_request(path: Path) -> None:
-    path.write_text(
-        build_canonical_json(build_offline_device_request()) + "\n",
-        encoding="utf-8",
-    )
+    path.write_text(build_canonical_json(build_offline_device_request()) + "\n", encoding="utf-8")
 
 
 def verify_offline_license_document(
@@ -150,7 +145,6 @@ def verify_offline_license_document(
         return AuthorizationResult(False, "License 尚未生效", "offline")
     if now >= expires_at:
         return AuthorizationResult(False, "License 已过期", "offline")
-
     if not public_key_pem:
         return AuthorizationResult(False, "缺少离线 License 公钥", "offline")
 
@@ -160,16 +154,12 @@ def verify_offline_license_document(
     except ImportError:
         return AuthorizationResult(False, "缺少 cryptography 依赖，无法验证 License", "offline")
 
-    signature = document.get("signature")
-    if not isinstance(signature, str):
-        return AuthorizationResult(False, "License 缺少签名", "offline")
-
     payload = {key: value for key, value in document.items() if key != "signature"}
     try:
         public_key = serialization.load_pem_public_key(public_key_pem.encode("utf-8"))
         if not isinstance(public_key, Ed25519PublicKey):
             return AuthorizationResult(False, "License 公钥类型无效", "offline")
-        public_key.verify(base64.b64decode(signature), build_canonical_json(payload).encode("utf-8"))
+        public_key.verify(base64.b64decode(str(document["signature"])), build_canonical_json(payload).encode("utf-8"))
     except Exception:
         return AuthorizationResult(False, "License 签名验证失败", "offline")
 

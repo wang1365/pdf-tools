@@ -1,12 +1,7 @@
-import sys
-from PySide6.QtWidgets import QApplication
-from pdf_tools.gui import MainWindow
+from .gui_dpg import main as run_dpg
 
 def main() -> int:
-    app = QApplication(sys.argv)
-    w = MainWindow()
-    w.show()
-    return app.exec()
+    return run_dpg()
 
 if __name__ == "__main__":
     raise SystemExit(main())

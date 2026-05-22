@@ -1,8 +1,6 @@
 import argparse
 import sys
 from pathlib import Path
-from pdf_tools.authorization import get_authorization_status
-from pdf_tools.converter import convert_pdf_to_docx
 
 def main() -> int:
     p = argparse.ArgumentParser(prog="pdf-tools", description="Convert PDF to Word")
@@ -22,12 +20,9 @@ def main() -> int:
         sys.stderr.write("Output file exists. Use --overwrite to replace\n")
         return 2
 
-    auth = get_authorization_status()
-    if not auth.valid:
-        sys.stderr.write(f"Authorization required: {auth.message}\n")
-        return 4
-
     try:
+        from pdf_tools.converter import convert_pdf_to_docx
+
         convert_pdf_to_docx(str(inp), str(out), start=args.start, end=args.end)
     except Exception as e:
         sys.stderr.write(str(e) + "\n")
