@@ -7,7 +7,7 @@ import os
 import platform
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 from urllib import error, request
@@ -23,6 +23,7 @@ DEFAULT_LICENSE_PUBLIC_KEY_PEM = (
 )
 PUBLIC_KEY_PEM = os.environ.get("PDF_TOOLS_LICENSE_PUBLIC_KEY", DEFAULT_LICENSE_PUBLIC_KEY_PEM).replace("\\n", "\n").strip()
 TRIAL_DAILY_LIMIT = 1
+UTC = timezone.utc
 
 
 @dataclass

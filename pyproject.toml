@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "pdf-tools"
 version = "0.1.0"
 description = "PDF desktop tools for conversion and processing"
-requires-python = ">=3.10"
+requires-python = ">=3.8"
 dependencies = ["pdf2docx", "dearpygui==2.3.1", "pillow", "cairosvg", "pypdf", "cryptography", "PyMuPDF", "python-pptx"]
 
 [tool.setuptools.packages.find]

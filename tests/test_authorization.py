@@ -3,7 +3,7 @@ import importlib.util
 import sys
 import tempfile
 import unittest
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 AUTH_PATH = Path(__file__).resolve().parents[1] / "pdf_tools" / "authorization.py"
@@ -19,6 +19,7 @@ build_offline_device_request = authorization.build_offline_device_request
 build_canonical_json = authorization.build_canonical_json
 is_cache_valid = authorization.is_cache_valid
 verify_offline_license_document = authorization.verify_offline_license_document
+UTC = timezone.utc
 
 
 class AuthorizationCoreTests(unittest.TestCase):

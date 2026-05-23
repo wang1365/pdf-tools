@@ -7,7 +7,7 @@ import sys
 import threading
 import time
 import webbrowser
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any, Callable
@@ -33,6 +33,7 @@ from .pages import pdf_compress, pdf_encrypt, pdf_merge, pdf_split, pdf_to_excel
 
 
 APP_TITLE = "PDF Tools"
+UTC = timezone.utc
 VIEWPORT_WIDTH = 1180
 VIEWPORT_HEIGHT = 760
 NATIVE_DIALOG_UNAVAILABLE = object()
