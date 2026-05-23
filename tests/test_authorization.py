@@ -14,6 +14,7 @@ sys.modules[spec.name] = authorization
 spec.loader.exec_module(authorization)
 
 AuthorizationStore = authorization.AuthorizationStore
+TrialUsageStore = authorization.TrialUsageStore
 build_offline_device_request = authorization.build_offline_device_request
 build_canonical_json = authorization.build_canonical_json
 is_cache_valid = authorization.is_cache_valid
@@ -21,6 +22,9 @@ verify_offline_license_document = authorization.verify_offline_license_document
 
 
 class AuthorizationCoreTests(unittest.TestCase):
+    def test_default_server_url_uses_production_license_site(self):
+        self.assertEqual(authorization.DEFAULT_SERVER_URL, "https://www.kylinuos.cn")
+
     def test_cache_is_valid_until_cache_until(self):
         now = datetime(2026, 5, 17, tzinfo=UTC)
         self.assertTrue(is_cache_valid({"cacheUntil": "2026-05-18T00:00:00.000Z"}, now))
@@ -32,9 +36,26 @@ class AuthorizationCoreTests(unittest.TestCase):
             store.save({"token": "abc", "cacheUntil": "2026-05-18T00:00:00.000Z"})
             self.assertEqual(store.load()["token"], "abc")
 
+            store.clear()
+
+            self.assertEqual(store.load(), {})
+
     def test_canonical_json_sorts_nested_keys(self):
         payload = {"b": 1, "a": {"d": 4, "c": 3}}
         self.assertEqual(build_canonical_json(payload), '{"a":{"c":3,"d":4},"b":1}')
+
+    def test_trial_usage_is_limited_per_feature_per_day(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store = TrialUsageStore(Path(tmp) / "trial.json")
+            today = datetime(2026, 5, 23, tzinfo=UTC).date()
+            tomorrow = datetime(2026, 5, 24, tzinfo=UTC).date()
+
+            self.assertTrue(store.try_consume("word", today=today))
+            self.assertFalse(store.try_consume("word", today=today))
+            self.assertTrue(store.try_consume("merge", today=today))
+            self.assertEqual(store.get_count("word", today=today), 1)
+            self.assertEqual(store.get_count("word", today=tomorrow), 0)
+            self.assertTrue(store.try_consume("word", today=tomorrow))
 
     def test_offline_device_request_uses_license_product(self):
         request = build_offline_device_request(datetime(2026, 5, 17, tzinfo=UTC))

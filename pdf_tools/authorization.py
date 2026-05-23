@@ -7,7 +7,7 @@ import os
 import platform
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 from urllib import error, request
@@ -15,13 +15,14 @@ from urllib import error, request
 
 PRODUCT_CODE = "pdf-tools-pro"
 REQUIRED_ENTITLEMENT = "desktop_basic_access"
-DEFAULT_SERVER_URL = os.environ.get("PDF_TOOLS_SERVER_URL", "http://localhost:3000").rstrip("/")
+DEFAULT_SERVER_URL = os.environ.get("PDF_TOOLS_SERVER_URL", "https://www.kylinuos.cn").rstrip("/")
 DEFAULT_LICENSE_PUBLIC_KEY_PEM = (
     "-----BEGIN PUBLIC KEY-----\n"
     "MCowBQYDK2VwAyEA4Bx0AX/czvQ/6h0kyK1kP/WTtklrD8UTD5ya3I4wHUE=\n"
     "-----END PUBLIC KEY-----\n"
 )
 PUBLIC_KEY_PEM = os.environ.get("PDF_TOOLS_LICENSE_PUBLIC_KEY", DEFAULT_LICENSE_PUBLIC_KEY_PEM).replace("\\n", "\n").strip()
+TRIAL_DAILY_LIMIT = 1
 
 
 @dataclass
@@ -78,6 +79,59 @@ class AuthorizationStore:
     def save(self, state: dict[str, Any]) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    def clear(self) -> None:
+        try:
+            self.path.unlink()
+        except FileNotFoundError:
+            return
+
+
+class TrialUsageStore:
+    def __init__(self, path: Path | None = None):
+        self.path = path or get_config_dir() / "trial-usage.json"
+
+    def _today_key(self, today: date | None = None) -> str:
+        return (today or date.today()).isoformat()
+
+    def load(self) -> dict[str, Any]:
+        if not self.path.exists():
+            return {}
+        try:
+            data = json.loads(self.path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    def save(self, state: dict[str, Any]) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    def get_count(self, feature_key: str, today: date | None = None) -> int:
+        state = self.load()
+        if state.get("date") != self._today_key(today):
+            return 0
+        counts = state.get("counts")
+        if not isinstance(counts, dict):
+            return 0
+        value = counts.get(feature_key, 0)
+        return value if isinstance(value, int) and value > 0 else 0
+
+    def try_consume(self, feature_key: str, limit: int = TRIAL_DAILY_LIMIT, today: date | None = None) -> bool:
+        today_key = self._today_key(today)
+        state = self.load()
+        counts = state.get("counts") if state.get("date") == today_key else {}
+        if not isinstance(counts, dict):
+            counts = {}
+
+        current = counts.get(feature_key, 0)
+        current = current if isinstance(current, int) and current > 0 else 0
+        if current >= limit:
+            return False
+
+        counts[feature_key] = current + 1
+        self.save({"date": today_key, "counts": counts})
+        return True
 
 
 def get_device_fingerprint() -> str:

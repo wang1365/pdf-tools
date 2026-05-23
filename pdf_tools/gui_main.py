@@ -1,4 +1,4 @@
-from .gui_dpg import main as run_dpg
+from pdf_tools.gui_dpg import main as run_dpg
 
 def main() -> int:
     return run_dpg()

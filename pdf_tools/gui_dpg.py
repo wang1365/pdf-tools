@@ -18,6 +18,8 @@ from .authorization import (
     AuthorizationResult,
     AuthorizationStore,
     DEFAULT_SERVER_URL,
+    TRIAL_DAILY_LIMIT,
+    TrialUsageStore,
     get_authorization_status,
     get_device_fingerprint,
     import_offline_license,
@@ -36,6 +38,7 @@ VIEWPORT_HEIGHT = 760
 NATIVE_DIALOG_UNAVAILABLE = object()
 TASK_BUTTON_TAGS = ["word_run", "merge_run", "split_run", "compress_run", "ppt_run", "image_run", "encrypt_run"]
 APP_ICON_PATH = Path(__file__).resolve().parent.parent / "assets" / "icon" / "app.ico"
+OFFLINE_DEVICE_REQUEST_FILENAME = "设备请求.json"
 TOOLS = [
     ("merge", "PDF 合并", "合并多个 PDF 文件"),
     ("split", "PDF 分割", "按页数拆分 PDF"),
@@ -46,6 +49,7 @@ TOOLS = [
     ("image", "PDF 转图片", "导出 PNG/JPG 图片"),
     ("encrypt", "PDF 加密", "添加打开密码"),
 ]
+TOOL_LABELS = {key: label for key, label, _description in TOOLS}
 
 
 def format_local_datetime(value: str | None) -> str:
@@ -79,25 +83,19 @@ def get_authorization_summary(result: AuthorizationResult) -> dict[str, str]:
     payload: dict[str, Any] = result.payload or {}
     source = {"online": "在线订阅", "offline": "离线 License"}.get(result.source, "未授权")
     expires_at = None
-    user = "-"
     edition = "-"
 
     if result.source == "offline":
         expires_at = str(payload.get("expires_at") or "") or None
         edition = str(payload.get("edition") or "-")
-        user = str(payload.get("user_id") or "-")
     elif result.source == "online":
         expires_at = str(payload.get("subscriptionExpiresAt") or payload.get("cacheUntil") or "") or None
         edition = str(payload.get("edition") or "-")
-        user_payload = payload.get("user")
-        if isinstance(user_payload, dict):
-            user = str(user_payload.get("nickname") or user_payload.get("id") or "-")
 
     return {
         "status": "已生效" if result.valid else "未授权",
         "source": source,
         "edition": edition,
-        "user": user,
         "expires_at": format_local_datetime(expires_at),
         "remaining": format_remaining(expires_at) if result.valid else "-",
         "message": result.message,
@@ -110,6 +108,7 @@ class PdfToolsApp:
         self.busy = False
         self.output_path: str | None = None
         self.auth_store = AuthorizationStore()
+        self.trial_usage_store = TrialUsageStore()
         self.poll_code: str | None = None
         self.confirm_url: str | None = None
         self.last_poll_at = 0.0
@@ -293,6 +292,7 @@ class PdfToolsApp:
                 dpg.add_menu_item(label="查看授权状态", callback=self.show_authorization_status)
                 dpg.add_separator()
                 dpg.add_menu_item(label="导入离线 License...", callback=self.import_offline_license_from_menu)
+                dpg.add_menu_item(label="删除现有授权", callback=self.clear_authorization)
                 dpg.add_menu_item(label="导出离线设备请求...", callback=self.export_device_request_from_menu)
                 dpg.add_menu_item(label="复制设备指纹", callback=self.copy_device_fingerprint)
                 dpg.add_separator()
@@ -357,6 +357,8 @@ class PdfToolsApp:
                 dpg.add_text("", tag="auth_card_detail", color=(100, 116, 139))
                 dpg.add_button(label="刷新", width=70, callback=lambda *args: self._refresh_auth_summary())
                 dpg.bind_item_theme(dpg.last_item(), "secondary_button_theme")
+                dpg.add_button(label="删除现有授权", width=120, callback=self.clear_authorization)
+                dpg.bind_item_theme(dpg.last_item(), "secondary_button_theme")
 
             dpg.add_separator()
             with dpg.group(horizontal=True):
@@ -371,11 +373,6 @@ class PdfToolsApp:
                     dpg.add_separator()
                     dpg.add_text("设备信息")
                     dpg.add_text("", tag="auth_device_fingerprint", color=(100, 116, 139), wrap=230)
-                    with dpg.group(horizontal=True):
-                        dpg.add_button(label="复制指纹", width=110, callback=self.copy_device_fingerprint)
-                        dpg.bind_item_theme(dpg.last_item(), "secondary_button_theme")
-                        dpg.add_button(label="导出请求", width=110, callback=self.export_device_request_from_menu)
-                        dpg.bind_item_theme(dpg.last_item(), "secondary_button_theme")
                     dpg.add_separator()
                     dpg.add_text("建议优先使用离线授权，适合客户内网、无法长期联网或交付后独立运行的环境。", color=(100, 116, 139), wrap=230)
                 dpg.bind_item_theme("auth_side_panel", "auth_panel_theme")
@@ -388,7 +385,7 @@ class PdfToolsApp:
                         self._auth_step(
                             "1",
                             "导出设备请求文件",
-                            "生成 pdf-tools-device-request.json，并把它带到可访问官网的电脑。",
+                            f"生成 {OFFLINE_DEVICE_REQUEST_FILENAME}，并把它带到可访问官网的电脑。",
                             "导出设备请求",
                             self.export_device_request_from_menu,
                             140,
@@ -582,7 +579,7 @@ class PdfToolsApp:
             if path is None:
                 return
             if target == "auth_export_dir":
-                self._export_device_request(path / "pdf-tools-device-request.json")
+                self._export_device_request(path / OFFLINE_DEVICE_REQUEST_FILENAME)
             else:
                 dpg.set_value(target, str(path))
             return
@@ -649,7 +646,7 @@ class PdfToolsApp:
             return
         path = app_data.get("file_path_name")
         if path and target == "auth_export_dir":
-            self._export_device_request(Path(path) / "pdf-tools-device-request.json")
+            self._export_device_request(Path(path) / OFFLINE_DEVICE_REQUEST_FILENAME)
         elif path:
             dpg.set_value(target, path)
 
@@ -731,6 +728,7 @@ class PdfToolsApp:
             lambda: convert_pdf_to_docx(str(inp), str(out), start=start if start else None, end=end if end else None),
             str(out),
             "正在转换 PDF 为 Word...",
+            feature_key="word",
         )
 
     def _run_merge(self, *args) -> None:
@@ -741,7 +739,7 @@ class PdfToolsApp:
         if not out:
             self._error("Choose an output PDF.")
             return
-        self._run_task(lambda: merge_pdfs(self.merge_files, out), out, "正在合并 PDF...")
+        self._run_task(lambda: merge_pdfs(self.merge_files, out), out, "正在合并 PDF...", feature_key="merge")
 
     def _run_split(self, *args) -> None:
         inp = self._require_file(self.split_pdf, "Select an input PDF.")
@@ -753,7 +751,7 @@ class PdfToolsApp:
             return
         prefix = dpg.get_value("split_prefix").strip() or inp.stem
         pages = dpg.get_value("split_pages")
-        self._run_task(lambda: split_pdf(str(inp), out_dir, pages, prefix), out_dir, "正在分割 PDF...")
+        self._run_task(lambda: split_pdf(str(inp), out_dir, pages, prefix), out_dir, "正在分割 PDF...", feature_key="split")
 
     def _run_compress(self, *args) -> None:
         inp = self._require_file(self.compress_pdf, "Select an input PDF.")
@@ -761,7 +759,7 @@ class PdfToolsApp:
         if not inp or not out:
             self._error("Select an input PDF and output PDF.")
             return
-        self._run_task(lambda: compress_pdf(str(inp), out), out, "正在压缩 PDF...")
+        self._run_task(lambda: compress_pdf(str(inp), out), out, "正在压缩 PDF...", feature_key="compress")
 
     def _run_ppt(self, *args) -> None:
         inp = self._require_file(self.ppt_pdf, "Select an input PDF.")
@@ -772,7 +770,7 @@ class PdfToolsApp:
         if not out.lower().endswith(".pptx"):
             out += ".pptx"
         dpi = dpg.get_value("ppt_dpi")
-        self._run_task(lambda: pdf_to_ppt(str(inp), out, dpi), out, "正在转换 PDF 为 PPT...")
+        self._run_task(lambda: pdf_to_ppt(str(inp), out, dpi), out, "正在转换 PDF 为 PPT...", feature_key="ppt")
 
     def _run_image(self, *args) -> None:
         inp = self._require_file(self.image_pdf, "Select an input PDF.")
@@ -788,7 +786,7 @@ class PdfToolsApp:
         def task() -> str:
             return pdf_to_images(str(inp), out_dir, fmt, dpi, mode, single_name)
 
-        self._run_task(task, None, "正在转换 PDF 为图片...")
+        self._run_task(task, None, "正在转换 PDF 为图片...", feature_key="image")
 
     def _run_encrypt(self, *args) -> None:
         inp = self._require_file(self.encrypt_pdf, "Select an input PDF.")
@@ -800,7 +798,7 @@ class PdfToolsApp:
         if not password:
             self._error("Enter a password.")
             return
-        self._run_task(lambda: encrypt_pdf(str(inp), out, password), out, "正在加密 PDF...")
+        self._run_task(lambda: encrypt_pdf(str(inp), out, password), out, "正在加密 PDF...", feature_key="encrypt")
 
     def open_auth_center(self, *args) -> None:
         self._refresh_auth_summary()
@@ -826,7 +824,6 @@ class PdfToolsApp:
                     f"有效期至：{summary['expires_at']}",
                     f"剩余时间：{summary['remaining']}",
                     f"授权版本：{summary['edition']}",
-                    f"授权用户：{summary['user']}",
                     f"说明：{summary['message']}",
                 ]
             ),
@@ -843,6 +840,14 @@ class PdfToolsApp:
         dpg.set_clipboard_text(get_device_fingerprint())
         self._set_auth_action_status("设备指纹已复制。")
         self._set_status("设备指纹已复制。")
+
+    def clear_authorization(self, *args) -> None:
+        self.auth_store.clear()
+        self.poll_code = None
+        self.confirm_url = None
+        self._refresh_auth_summary()
+        self._set_auth_action_status("现有授权已删除。")
+        self._set_status("现有授权已删除。")
 
     def open_offline_license_page(self, *args) -> None:
         webbrowser.open(f"{DEFAULT_SERVER_URL}/account/licenses/offline")
@@ -880,15 +885,13 @@ class PdfToolsApp:
         detail = (
             f"有效期：{summary['expires_at']}    "
             f"剩余：{summary['remaining']}    "
-            f"版本：{summary['edition']}    "
-            f"用户：{summary['user']}"
+            f"版本：{summary['edition']}"
         )
         status_detail = "\n".join(
             [
                 f"有效期至：{summary['expires_at']}",
                 f"剩余时间：{summary['remaining']}",
                 f"授权版本：{summary['edition']}",
-                f"授权用户：{summary['user']}",
                 f"状态说明：{summary['message']}",
             ]
         )
@@ -922,6 +925,7 @@ class PdfToolsApp:
             message = f"导出失败：{exc}"
         else:
             message = f"离线设备请求已保存：{path}"
+            open_parent_folder(str(path))
         self._set_auth_action_status(message)
         self._set_status(message)
 
@@ -959,9 +963,17 @@ class PdfToolsApp:
             return None
         return path
 
-    def _run_task(self, func: Callable[[], str | None], expected_output: str | None, message: str) -> None:
+    def _run_task(
+        self,
+        func: Callable[[], str | None],
+        expected_output: str | None,
+        message: str,
+        feature_key: str | None = None,
+    ) -> None:
         if self.busy:
             self._set_status("当前任务仍在运行，请等待完成。", busy=True)
+            return
+        if feature_key and not self._allow_feature_run(feature_key):
             return
         self.busy = True
         self._set_task_buttons_enabled(False)
@@ -976,6 +988,18 @@ class PdfToolsApp:
                 self._results.put(("error", str(exc)))
 
         threading.Thread(target=worker, daemon=True).start()
+
+    def _allow_feature_run(self, feature_key: str) -> bool:
+        if get_authorization_status(self.auth_store).valid:
+            return True
+        if self.trial_usage_store.try_consume(feature_key):
+            return True
+
+        feature_label = TOOL_LABELS.get(feature_key, feature_key)
+        message = f"未授权版本每天每个功能只能执行 {TRIAL_DAILY_LIMIT} 次，{feature_label} 今日次数已用完。"
+        self._set_auth_action_status(message)
+        self._error(message)
+        return False
 
     def _poll_results(self, *args) -> None:
         self._update_menu_status_layout()
