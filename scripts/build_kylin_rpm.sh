@@ -106,8 +106,6 @@ DESKTOP
 
 chmod 755 %{buildroot}/opt/pdf-tools/pdf-tools
 chmod 755 %{buildroot}/opt/pdf-tools/pdf-tools-gui
-chmod 755 %{buildroot}/usr/bin/pdf-tools
-chmod 755 %{buildroot}/usr/bin/pdf-tools-gui
 chmod 644 %{buildroot}/usr/share/applications/pdf-tools.desktop
 chmod 644 %{buildroot}/usr/share/icons/hicolor/256x256/apps/pdf-tools.png
 
