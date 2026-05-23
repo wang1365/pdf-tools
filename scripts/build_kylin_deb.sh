@@ -11,20 +11,9 @@ INSTALL_DIR="$PKG_DIR/opt/$APP_NAME"
 PIP="pip3"
 PYINSTALLER="pyinstaller"
 
-command -v python3 >/dev/null 2>&1 || {
-  echo "python3 not found. Install python3 first."
-  exit 1
-}
-
-command -v pip3 >/dev/null 2>&1 || {
-  echo "pip3 not found. Install python3-pip first."
-  exit 1
-}
-
 rm -rf "$PKG_DIR" "$ROOT/build" "$ROOT/dist"
 
 cd "$ROOT"
-
 
 
 "$PIP" install  pyinstaller
