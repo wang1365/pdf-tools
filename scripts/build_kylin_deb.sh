@@ -4,22 +4,36 @@ set -euo pipefail
 APP_NAME="pdf-tools"
 VERSION="0.1.0"
 ARCH="$(dpkg --print-architecture)"
-ROOT="$(pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PKG_DIR="$ROOT/build/${APP_NAME}_${VERSION}_${ARCH}"
 INSTALL_DIR="$PKG_DIR/opt/$APP_NAME"
+VENV_DIR="$ROOT/.venv"
+PIP="$VENV_DIR/bin/pip3"
+PYINSTALLER="$VENV_DIR/bin/pyinstaller"
 
-rm -rf "$PKG_DIR" "$ROOT/build" "$ROOT/dist"
-
-uv -V >/dev/null 2>&1 || {
-  echo "uv not found. Install uv first: curl -LsSf https://astral.sh/uv/install.sh | sh"
+command -v python3 >/dev/null 2>&1 || {
+  echo "python3 not found. Install python3 first."
   exit 1
 }
 
-[ -d .venv ] || uv venv
-uv sync
-uv pip install pyinstaller
+command -v pip3 >/dev/null 2>&1 || {
+  echo "pip3 not found. Install python3-pip first."
+  exit 1
+}
 
-uv run pyinstaller \
+rm -rf "$PKG_DIR" "$ROOT/build" "$ROOT/dist"
+
+cd "$ROOT"
+
+if [[ ! -d "$VENV_DIR" ]]; then
+  python3 -m venv "$VENV_DIR"
+fi
+
+"$PIP" install --upgrade pip
+"$PIP" install -e "$ROOT" pyinstaller
+
+"$PYINSTALLER" \
   -F \
   -n pdf-tools-gui \
   --windowed \
