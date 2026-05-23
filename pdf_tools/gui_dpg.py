@@ -393,7 +393,7 @@ class PdfToolsApp:
                         self._auth_step(
                             "2",
                             "官网签发 License",
-                            "在官网账号中心导入设备请求，签发并下载 .lic 文件。",
+                            "在官网账号中心导入设备请求，签发并下载 .lic 文件。如果没有订阅，请先进行订阅，然后再申请离线授权文件。",
                             "打开官网离线页面",
                             self.open_offline_license_page,
                             160,
