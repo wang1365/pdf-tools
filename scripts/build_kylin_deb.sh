@@ -8,9 +8,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PKG_DIR="$ROOT/build/${APP_NAME}_${VERSION}_${ARCH}"
 INSTALL_DIR="$PKG_DIR/opt/$APP_NAME"
-VENV_DIR="$ROOT/.venv"
-PIP="$VENV_DIR/bin/pip3"
-PYINSTALLER="$VENV_DIR/bin/pyinstaller"
+PIP="pip3"
+PYINSTALLER="pyinstaller"
 
 command -v python3 >/dev/null 2>&1 || {
   echo "python3 not found. Install python3 first."
@@ -26,12 +25,9 @@ rm -rf "$PKG_DIR" "$ROOT/build" "$ROOT/dist"
 
 cd "$ROOT"
 
-if [[ ! -d "$VENV_DIR" ]]; then
-  python3 -m venv "$VENV_DIR"
-fi
 
-"$PIP" install --upgrade pip
-"$PIP" install -e "$ROOT" pyinstaller
+
+"$PIP" install  pyinstaller
 
 "$PYINSTALLER" \
   -F \
@@ -40,7 +36,7 @@ fi
   --clean \
   --noconfirm \
   --add-data "assets:assets" \
-  --collect-all PySide6 \
+  --collect-all dearpygui \
   --collect-all PyMuPDF \
   --collect-all numpy \
   --collect-all lxml \
