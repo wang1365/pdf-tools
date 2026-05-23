@@ -1,3 +1,4 @@
+
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -21,7 +22,7 @@ uv -V >/dev/null 2>&1 || {
 rm -rf "$ROOT/dist" "$ROOT/build"
 mkdir -p "$RPM_TOP/BUILD" "$RPM_TOP/BUILDROOT" "$RPM_TOP/RPMS" "$RPM_TOP/SOURCES" "$RPM_TOP/SPECS" "$RPM_TOP/SRPMS"
 
-[ -d .venv ] || uv venv --python python3
+[ -d .venv ] || uv venv
 uv sync
 uv pip install pyinstaller
 
@@ -31,7 +32,8 @@ uv run pyinstaller \
   --windowed \
   --clean \
   --noconfirm \
-  --collect-all dearpygui \
+  --add-data "assets:assets" \
+  --collect-all PySide6 \
   --collect-all PyMuPDF \
   --collect-all numpy \
   --collect-all lxml \
