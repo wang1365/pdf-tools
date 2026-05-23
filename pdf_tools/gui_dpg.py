@@ -242,6 +242,21 @@ class PdfToolsApp:
                 dpg.add_theme_color(dpg.mvThemeCol_Text, (31, 41, 55), category=dpg.mvThemeCat_Core)
                 dpg.add_theme_color(dpg.mvThemeCol_HeaderHovered, (239, 246, 255), category=dpg.mvThemeCat_Core)
 
+        with dpg.theme(tag="auth_dialog_theme"):
+            with dpg.theme_component(dpg.mvWindowAppItem):
+                dpg.add_theme_color(dpg.mvThemeCol_WindowBg, (255, 255, 255), category=dpg.mvThemeCat_Core)
+                dpg.add_theme_color(dpg.mvThemeCol_Border, (71, 85, 105), category=dpg.mvThemeCat_Core)
+                dpg.add_theme_color(dpg.mvThemeCol_TitleBg, (226, 232, 240), category=dpg.mvThemeCat_Core)
+                dpg.add_theme_color(dpg.mvThemeCol_TitleBgActive, (219, 234, 254), category=dpg.mvThemeCat_Core)
+                dpg.add_theme_style(dpg.mvStyleVar_WindowBorderSize, 2, category=dpg.mvThemeCat_Core)
+                dpg.add_theme_style(dpg.mvStyleVar_WindowPadding, 16, 14, category=dpg.mvThemeCat_Core)
+
+        with dpg.theme(tag="auth_panel_theme"):
+            with dpg.theme_component(dpg.mvChildWindow):
+                dpg.add_theme_color(dpg.mvThemeCol_ChildBg, (248, 250, 252), category=dpg.mvThemeCat_Core)
+                dpg.add_theme_color(dpg.mvThemeCol_Border, (148, 163, 184), category=dpg.mvThemeCat_Core)
+                dpg.add_theme_style(dpg.mvStyleVar_ChildBorderSize, 1, category=dpg.mvThemeCat_Core)
+
     def _build_ui(self) -> None:
         with dpg.file_dialog(
             directory_selector=False,
@@ -332,41 +347,60 @@ class PdfToolsApp:
         dpg.set_frame_callback(1, self._poll_results)
 
     def _build_dialogs(self) -> None:
-        with dpg.window(label="授权中心", tag="auth_window", show=False, width=800, height=680, no_resize=False):
-            dpg.add_text("授权中心", tag="auth_title")
-            if self.title_font:
-                dpg.bind_item_font("auth_title", self.title_font)
-            dpg.add_text("支持在线订阅绑定和离线 License，两种方式任一生效即可。", color=(100, 116, 139), wrap=700)
-            dpg.add_separator()
-            with dpg.child_window(height=122, no_scrollbar=True):
-                dpg.add_text("", tag="auth_card_title")
-                dpg.add_text("", tag="auth_card_detail", wrap=690)
-            dpg.add_text("", tag="auth_device_fingerprint", wrap=700)
+        with dpg.window(label="授权中心", tag="auth_window", show=False, width=940, height=540, no_resize=False, no_scrollbar=True):
             with dpg.group(horizontal=True):
-                dpg.add_button(label="复制设备指纹", width=130, callback=self.copy_device_fingerprint)
-                dpg.add_button(label="刷新状态", width=100, callback=lambda *args: self._refresh_auth_summary())
+                dpg.add_text("当前授权：", color=(100, 116, 139))
+                dpg.add_text("", tag="auth_card_title")
+                dpg.add_text("", tag="auth_card_detail", color=(100, 116, 139))
+            with dpg.group(horizontal=True):
+                dpg.add_text("", tag="auth_device_fingerprint", color=(100, 116, 139))
+                dpg.add_button(label="复制", width=70, callback=self.copy_device_fingerprint)
+                dpg.bind_item_theme(dpg.last_item(), "secondary_button_theme")
+                dpg.add_button(label="刷新", width=70, callback=lambda *args: self._refresh_auth_summary())
                 dpg.bind_item_theme(dpg.last_item(), "secondary_button_theme")
 
             dpg.add_separator()
-            dpg.add_text("离线订阅 License")
-            dpg.add_text("1. 导出本机设备请求；2. 在官网账号中心签发 License；3. 回到这里导入 .lic 文件。", color=(100, 116, 139), wrap=700)
             with dpg.group(horizontal=True):
-                dpg.add_button(label="导出设备请求", width=130, callback=self.export_device_request_from_menu)
-                dpg.add_button(label="打开官网离线页面", width=150, callback=self.open_offline_license_page)
-                dpg.add_button(label="导入已签发 License", width=150, callback=self.import_offline_license_from_menu)
+                dpg.add_text("授权方式")
+                dpg.add_button(label="离线授权", tag="auth_mode_offline_btn", width=86, height=28, callback=lambda *args: self._set_auth_mode("离线授权"))
+                dpg.add_button(label="在线登录", tag="auth_mode_online_btn", width=86, height=28, callback=lambda *args: self._set_auth_mode("在线登录"))
 
-            dpg.add_separator()
-            dpg.add_text("在线登录")
-            dpg.add_text("生成绑定码后在网页确认本机设备，客户端会自动轮询并写入订阅缓存。", color=(100, 116, 139), wrap=700)
-            dpg.add_text("绑定码：-", tag="auth_bind_code")
-            with dpg.group(horizontal=True):
-                dpg.add_button(label="生成在线登录绑定码", width=170, callback=self.start_online_binding)
-                dpg.add_button(label="打开网页确认", tag="auth_open_confirm_btn", width=120, callback=self.open_online_confirm, enabled=False)
+            with dpg.child_window(tag="auth_offline_group", height=250, no_scrollbar=True):
+                dpg.add_text("离线授权流程（推荐）")
+                dpg.add_separator()
+                with dpg.group(horizontal=True):
+                    dpg.add_text("1. 导出设备请求文件")
+                    dpg.add_button(label="导出设备请求", width=130, callback=self.export_device_request_from_menu)
+                dpg.add_text("生成 pdf-tools-device-request.json，用于官网签发 License。", color=(100, 116, 139))
+                with dpg.group(horizontal=True):
+                    dpg.add_text("2. 官网签发 License")
+                    dpg.add_button(label="打开官网离线页面", width=150, callback=self.open_offline_license_page)
+                dpg.add_text("在官网账号中心导入设备请求，签发并下载 .lic 文件。", color=(100, 116, 139))
+                with dpg.group(horizontal=True):
+                    dpg.add_text("3. 导入 License 生效")
+                    dpg.add_button(label="导入已签发 License", width=150, callback=self.import_offline_license_from_menu)
+                dpg.add_text("导入成功后无需重启，授权状态会立即刷新。", color=(100, 116, 139))
+            dpg.bind_item_theme("auth_offline_group", "auth_panel_theme")
+
+            with dpg.child_window(tag="auth_online_group", height=250, no_scrollbar=True, show=False):
+                dpg.add_text("在线登录流程")
+                dpg.add_separator()
+                with dpg.group(horizontal=True):
+                    dpg.add_text("1. 生成绑定码")
+                    dpg.add_button(label="生成在线登录绑定码", width=170, callback=self.start_online_binding)
+                with dpg.group(horizontal=True):
+                    dpg.add_text("2. 网页确认设备")
+                    dpg.add_button(label="打开网页确认", tag="auth_open_confirm_btn", width=120, callback=self.open_online_confirm, enabled=False)
+                dpg.add_text("3. 保持本窗口打开，客户端会自动轮询并写入订阅缓存。", color=(100, 116, 139))
+                dpg.add_text("绑定码：-", tag="auth_bind_code")
+            dpg.bind_item_theme("auth_online_group", "auth_panel_theme")
+
             dpg.add_text("", tag="auth_action_status", color=(100, 116, 139), wrap=700)
             with dpg.group(horizontal=True):
-                dpg.add_spacer(width=560)
+                dpg.add_spacer(width=800)
                 dpg.add_button(label="关闭", width=90, callback=lambda *args: dpg.configure_item("auth_window", show=False))
                 dpg.bind_item_theme(dpg.last_item(), "secondary_button_theme")
+        dpg.bind_item_theme("auth_window", "auth_dialog_theme")
 
         with dpg.window(label="授权状态", tag="auth_status_window", show=False, width=520, height=300):
             dpg.add_text("授权状态", tag="auth_status_title")
@@ -718,7 +752,18 @@ class PdfToolsApp:
 
     def open_auth_center(self, *args) -> None:
         self._refresh_auth_summary()
-        self._show_window_centered("auth_window", 800, 680)
+        self._set_auth_mode("离线授权")
+        self._show_window_centered("auth_window", 940, 540)
+
+    def _set_auth_mode(self, mode: str) -> None:
+        if dpg.does_item_exist("auth_offline_group"):
+            dpg.configure_item("auth_offline_group", show=mode == "离线授权")
+        if dpg.does_item_exist("auth_online_group"):
+            dpg.configure_item("auth_online_group", show=mode == "在线登录")
+        if dpg.does_item_exist("auth_mode_offline_btn"):
+            dpg.bind_item_theme("auth_mode_offline_btn", "primary_button_theme" if mode == "离线授权" else "secondary_button_theme")
+        if dpg.does_item_exist("auth_mode_online_btn"):
+            dpg.bind_item_theme("auth_mode_online_btn", "primary_button_theme" if mode == "在线登录" else "secondary_button_theme")
 
     def show_authorization_status(self, *args) -> None:
         summary = self._refresh_auth_summary()
@@ -782,7 +827,13 @@ class PdfToolsApp:
         result = get_authorization_status(self.auth_store)
         summary = get_authorization_summary(result)
         badge = f"{summary['status']} · {summary['source']}"
-        detail = "\n".join(
+        detail = (
+            f"有效期：{summary['expires_at']}    "
+            f"剩余：{summary['remaining']}    "
+            f"版本：{summary['edition']}    "
+            f"用户：{summary['user']}"
+        )
+        status_detail = "\n".join(
             [
                 f"有效期至：{summary['expires_at']}",
                 f"剩余时间：{summary['remaining']}",
@@ -795,10 +846,12 @@ class PdfToolsApp:
             "auth_status_badge": badge,
             "auth_card_title": badge,
             "auth_card_detail": detail,
-            "auth_device_fingerprint": f"设备指纹：{get_device_fingerprint()}",
+            "auth_device_fingerprint": f"设备指纹：{get_device_fingerprint()[:28]}...",
         }.items():
             if dpg.does_item_exist(tag):
                 dpg.set_value(tag, value)
+        if dpg.does_item_exist("auth_status_detail"):
+            dpg.set_value("auth_status_detail", status_detail)
         return summary
 
     def _set_auth_action_status(self, message: str) -> None:
