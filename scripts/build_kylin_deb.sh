@@ -8,8 +8,8 @@ ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 VERSION="${VERSION:-$(sed -n 's/^version = "\(.*\)"/\1/p' "$ROOT/pyproject.toml" | head -n 1)}"
 PKG_DIR="$ROOT/build/${APP_NAME}_${VERSION}_${ARCH}"
 INSTALL_DIR="$PKG_DIR/opt/$APP_NAME"
-PIP="pip3"
-PYINSTALLER="pyinstaller"
+PYTHON_BIN="${PYTHON_BIN:-python3.8}"
+REQUIRED_GLIBCXX_VERSION="${REQUIRED_GLIBCXX_VERSION:-GLIBCXX_3.4.30}"
 
 if [[ -z "$VERSION" ]]; then
   echo "Could not read project version from pyproject.toml"
@@ -20,10 +20,14 @@ rm -rf "$PKG_DIR" "$ROOT/build" "$ROOT/dist"
 
 cd "$ROOT"
 
+command -v "$PYTHON_BIN" >/dev/null 2>&1 || {
+  echo "$PYTHON_BIN not found. Install Python 3.8.10 or set PYTHON_BIN=/path/to/python3.8"
+  exit 1
+}
 
-"$PIP" install pyinstaller
+"$PYTHON_BIN" -m pip install -e . pyinstaller
 
-"$PYINSTALLER" \
+"$PYTHON_BIN" -m PyInstaller \
   --onedir \
   -n pdf-tools-gui \
   --windowed \
@@ -35,6 +39,41 @@ cd "$ROOT"
   --collect-all numpy \
   --collect-all lxml \
   pdf_tools/gui_main.py
+
+repair_libstdcxx() {
+  local bundled_lib="$1"
+  local candidate
+
+  if strings "$bundled_lib" | grep -qx "$REQUIRED_GLIBCXX_VERSION"; then
+    return
+  fi
+
+  echo "Bundled $bundled_lib does not provide $REQUIRED_GLIBCXX_VERSION"
+
+  candidate="$(g++ -print-file-name=libstdc++.so.6 2>/dev/null || true)"
+  if [[ -n "$candidate" && "$candidate" != "libstdc++.so.6" && -f "$candidate" ]] \
+    && strings "$candidate" | grep -qx "$REQUIRED_GLIBCXX_VERSION"; then
+    echo "Replacing bundled libstdc++.so.6 with $candidate"
+    cp "$candidate" "$bundled_lib"
+    return
+  fi
+
+  candidate="$(ldconfig -p 2>/dev/null | awk '/libstdc\+\+\.so\.6/{print $NF; exit}')"
+  if [[ -n "$candidate" && -f "$candidate" ]] \
+    && strings "$candidate" | grep -qx "$REQUIRED_GLIBCXX_VERSION"; then
+    echo "Replacing bundled libstdc++.so.6 with $candidate"
+    cp "$candidate" "$bundled_lib"
+    return
+  fi
+
+  echo "Could not find libstdc++.so.6 with $REQUIRED_GLIBCXX_VERSION on the build machine."
+  echo "Install a newer libstdc++/gcc runtime or build on the same Kylin image that can run Dear PyGui."
+  exit 1
+}
+
+while IFS= read -r libstdcxx; do
+  repair_libstdcxx "$libstdcxx"
+done < <(find "$ROOT/dist/pdf-tools-gui" -type f -name "libstdc++.so.6")
 
 mkdir -p "$INSTALL_DIR"
 mkdir -p "$PKG_DIR/usr/share/applications"
